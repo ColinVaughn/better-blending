@@ -1,0 +1,128 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  # The matrix needs three JDKs. setup-java installs them; this tells Gradle's
+  # toolchain detection where they are, so nothing is downloaded twice.
+  GRADLE_TOOLCHAINS: -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_21_X64,JAVA_HOME_25_X64
+
+jobs:
+  # The node list comes from settings.gradle.kts, so adding a Minecraft version there
+  # adds it to every job below without touching this file.
+  nodes:
+    name: List nodes
+    runs-on: ubuntu-latest
+    outputs:
+      list: ${{ steps.nodes.outputs.list }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: nodes
+        run: |
+          list=$(sed -n 's/.*version("\([^"]*\)".*/\1/p' settings.gradle.kts | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "list=$list" >> "$GITHUB_OUTPUT"
+          echo "$list"
+
+  build:
+    name: Build ${{ matrix.node }}
+    needs: nodes
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ${{ fromJSON(needs.nodes.outputs.list) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: gradle/actions/wrapper-validation@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+            25
+      - uses: gradle/actions/setup-gradle@v4
+      # Each node configures only itself; configuring all of them would set up every
+      # Minecraft version in every job.
+      - name: Build
+        run: ./gradlew "${{ matrix.node }}:build" --configure-on-demand $GRADLE_TOOLCHAINS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: better-blending-${{ matrix.node }}
+          path: versions/${{ matrix.node }}/build/libs/*.jar
+          if-no-files-found: error
+
+  # The GLSL and GPU comparisons render with real shaders. Runners have no GPU, so
+  # they run under Xvfb on Mesa's software OpenGL.
+  shader-tests:
+    name: Shader tests (1.21.1, software GL)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+            25
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install a virtual display and software OpenGL
+        run: sudo apt-get update && sudo apt-get install -y xvfb libgl1-mesa-dri libglx-mesa0
+      - name: Test
+        env:
+          BB_SHADER_GL_TEST: "1"
+        run: xvfb-run -a ./gradlew "1.21.1-fabric:test" --configure-on-demand $GRADLE_TOOLCHAINS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shader-review
+          path: versions/1.21.1-fabric/build/shader-review/
+          if-no-files-found: ignore
+
+  # Compiling proves that mixin target classes exist, not that each injection still
+  # finds its method. The audit applies every mixin at startup and exits. Forge and
+  # NeoForge open an early loading window first, hence the virtual display.
+  # The renderer adapters apply only when their renderer is installed, so each node is
+  # audited once without renderers and once with Sodium and Iris, and the two Forge-
+  # family nodes again with the other renderers they support.
+  mixin-audit:
+    name: Mixin audit ${{ matrix.node }} (${{ matrix.renderers }})
+    needs: nodes
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ${{ fromJSON(needs.nodes.outputs.list) }}
+        # "iris" installs Iris with the Sodium-family renderer it runs on: Sodium, or
+        # Embeddium with Oculus on Forge 1.20.1. Any other value names one renderer.
+        renderers: [none, iris]
+        include:
+          - node: 1.21.1-neoforge
+            renderers: embeddium
+          - node: 1.20.1-forge
+            renderers: rubidium
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+            25
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install a virtual display and software OpenGL
+        run: sudo apt-get update && sudo apt-get install -y xvfb libgl1-mesa-dri libglx-mesa0
+      - name: Audit
+        run: >-
+          xvfb-run -a ./gradlew "${{ matrix.node }}:runClient" -PauditMixins
+          ${{ matrix.renderers == 'iris' && '-Piris' || matrix.renderers != 'none' && format('-Prenderer={0}', matrix.renderers) || '' }}
+          --configure-on-demand $GRADLE_TOOLCHAINS

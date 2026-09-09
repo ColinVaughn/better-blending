@@ -1,0 +1,19 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.betterblending.mixin.compat",
+  "plugin": "dev.betterblending.mixin.compat.RendererMixinPlugin",
+  "compatibilityLevel": "JAVA_17",
+  "client": [
+    "IrisProgramsMixin",
+    "IrisSamplersMixin",
+    "IrisShaderInterfaceMixin",
+    "RendererShaderLoaderMixin",
+    "RendererShaderMixin",
+    "RendererSliceMixin",
+    "SodiumCompilerMixin",
+    "SodiumSectionMixin",
+    "SodiumVisibilityMixin"
+  ],
+  "injectors": { "defaultRequire": 1 }
+}

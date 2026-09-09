@@ -1,0 +1,16 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.betterblending.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "refmap": "better_blending.refmap.json",
+  "client": [
+    "GameRendererMixin",
+    "TerrainVisibilityMixin",
+    "TerrainCompilerMixin",
+    "CompiledSectionAccessor"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

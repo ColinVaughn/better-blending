@@ -1,0 +1,8 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.betterblending.mixin.compat",
+  "compatibilityLevel": "JAVA_25",
+  "client": [],
+  "injectors": { "defaultRequire": 1 }
+}

@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "better_blending",
+  "version": "${version}",
+  "name": "Better Blending",
+  "description": "Configurable block and regional terrain blending in every dimension.",
+  "authors": [
+    "Colin Vaughn"
+  ],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "modmenu": ["dev.betterblending.fabric.BetterBlendingModMenu"],
+    "client": [
+      "dev.betterblending.fabric.BetterBlendingClient"
+    ]
+  },
+  "mixins": [
+    "better_blending.mixins.json",
+    "better_blending.compat.mixins.json"
+  ],
+  "suggests": {
+    "modmenu": "${modmenuRange}",
+    "cloth-config": "${clothRange}"
+  },
+  "depends": {
+    "fabricloader": ">=${loader}",
+    "fabric-api": "*",
+    "minecraft": "${minecraft}",
+    "java": ">=${java}"
+  }
+}

@@ -1,0 +1,33 @@
+modLoader = "javafml"
+loaderVersion = "[47,)"
+license = "MIT"
+
+[[mods]]
+modId = "better_blending"
+version = "${version}"
+displayName = "Better Blending"
+description = "Configurable block and regional terrain blending in every dimension."
+authors = "Colin Vaughn"
+# Client-only: servers neither need the mod nor refuse clients that have it.
+displayTest = "IGNORE_ALL_VERSION"
+
+[[dependencies.better_blending]]
+modId = "forge"
+mandatory = true
+versionRange = "${loaderRange}"
+ordering = "NONE"
+side = "CLIENT"
+
+[[dependencies.better_blending]]
+modId = "minecraft"
+mandatory = true
+versionRange = "${minecraftRange}"
+ordering = "NONE"
+side = "CLIENT"
+
+[[dependencies.better_blending]]
+modId = "cloth_config"
+mandatory = false
+versionRange = "${clothRange}"
+ordering = "AFTER"
+side = "CLIENT"

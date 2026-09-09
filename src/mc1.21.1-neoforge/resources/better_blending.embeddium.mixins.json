@@ -1,0 +1,9 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.betterblending.mixin.compat",
+  "plugin": "dev.betterblending.mixin.compat.RendererMixinPlugin",
+  "compatibilityLevel": "JAVA_21",
+  "client": ["EmbeddiumCompilerMixin", "EmbeddiumVisibilityMixin", "EmbeddiumSectionMixin"],
+  "injectors": { "defaultRequire": 1 }
+}

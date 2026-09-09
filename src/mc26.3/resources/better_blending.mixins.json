@@ -1,0 +1,19 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.betterblending.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "ChunkSectionsToRenderMixin",
+    "CompiledSectionAccessor",
+    "GameRendererMixin",
+    "LevelExtractorMixin",
+    "LevelRendererMixin",
+    "ShaderManagerMixin",
+    "ShaderSourceMixin",
+    "TerrainCompilerMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

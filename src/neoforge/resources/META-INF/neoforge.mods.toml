@@ -1,0 +1,40 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "MIT"
+
+[[mods]]
+modId = "better_blending"
+version = "${version}"
+displayName = "Better Blending"
+description = "Configurable block and regional terrain blending in every dimension."
+authors = "Colin Vaughn"
+
+[[dependencies.better_blending]]
+modId = "neoforge"
+type = "required"
+versionRange = "${loaderRange}"
+ordering = "NONE"
+side = "CLIENT"
+
+[[dependencies.better_blending]]
+modId = "minecraft"
+type = "required"
+versionRange = "${minecraftRange}"
+ordering = "NONE"
+side = "CLIENT"
+
+[[mixins]]
+config = "better_blending.mixins.json"
+
+[[mixins]]
+config = "better_blending.compat.mixins.json"
+
+[[mixins]]
+config = "better_blending.embeddium.mixins.json"
+
+[[dependencies.better_blending]]
+modId = "cloth_config"
+type = "optional"
+versionRange = "${clothRange}"
+ordering = "AFTER"
+side = "CLIENT"

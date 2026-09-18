@@ -71,6 +71,9 @@ jobs:
   shader-tests:
     name: Shader tests (1.21.1, software GL)
     runs-on: ubuntu-latest
+    # A client that cannot open a window blocks on a dialog no runner will ever answer,
+    # so bound the job rather than let it hold a release open for the six hour default.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -104,6 +107,10 @@ jobs:
     name: Mixin audit ${{ matrix.node }} (${{ matrix.renderers }})
     needs: nodes
     runs-on: ubuntu-latest
+    # FML reports a failed startup through a modal dialog, which on a virtual display
+    # waits for a click that never comes. Without this the job runs for the six hour
+    # default and holds the release behind it.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -132,8 +139,17 @@ jobs:
             25
       - uses: gradle/actions/setup-gradle@v4
       - name: Install a virtual display and software OpenGL
-        run: sudo apt-get update && sudo apt-get install -y xvfb libgl1-mesa-dri libglx-mesa0
+        run: >-
+          sudo apt-get update && sudo apt-get install -y
+          xvfb libgl1-mesa-dri libglx-mesa0 libegl1 libegl-mesa0
+      # 26.3 renders through SDL, which asks X for an sRGB-capable core profile visual
+      # that Xvfb's GLX does not offer, so the client dies before any mixin is audited.
+      # Mesa's EGL does offer one. The nodes still on GLFW ignore these hints.
       - name: Audit
+        env:
+          SDL_VIDEO_FORCE_EGL: "1"
+          SDL_VIDEO_X11_FORCE_EGL: "1"
+          LIBGL_ALWAYS_SOFTWARE: "1"
         run: >-
           xvfb-run -a ./gradlew "${{ matrix.node }}:runClient" -PauditMixins
           ${{ matrix.renderers == 'iris' && '-Piris' || matrix.renderers != 'none' && format('-Prenderer={0}', matrix.renderers) || '' }}

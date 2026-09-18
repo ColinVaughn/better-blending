@@ -28,7 +28,7 @@ public final class BlendingConfig {
     static Path configDirectory;
     boolean enabled = true;
     boolean vanilla_terrain_shader_enabled = true;
-    boolean texture_aligned_blending = false;
+    boolean texture_aligned_blending = true;
     List<String> disabled_dimensions = new ArrayList<>();
     List<String> excluded_blocks = new ArrayList<>(DEFAULT_EXCLUDED_BLOCKS);
     float terrain_biome_blend_strength = 0.45F;

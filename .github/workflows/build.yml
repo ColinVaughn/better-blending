@@ -50,9 +50,16 @@ jobs:
             25
       - uses: gradle/actions/setup-gradle@v4
       # Each node configures only itself; configuring all of them would set up every
-      # Minecraft version in every job.
+      # Minecraft version in every job. build includes check, which runs the PMD
+      # complexity limits in config/pmd on this node's sources.
       - name: Build
         run: ./gradlew "${{ matrix.node }}:build" --configure-on-demand $GRADLE_TOOLCHAINS
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: complexity-report-${{ matrix.node }}
+          path: versions/${{ matrix.node }}/build/reports/pmd/
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
           name: better-blending-${{ matrix.node }}
@@ -91,8 +98,8 @@ jobs:
   # finds its method. The audit applies every mixin at startup and exits. Forge and
   # NeoForge open an early loading window first, hence the virtual display.
   # The renderer adapters apply only when their renderer is installed, so each node is
-  # audited once without renderers and once with Sodium and Iris, and the two Forge-
-  # family nodes again with the other renderers they support.
+  # audited once without renderers and once with Sodium and Iris, and the nodes with
+  # further renderers again with each of those.
   mixin-audit:
     name: Mixin audit ${{ matrix.node }} (${{ matrix.renderers }})
     needs: nodes
@@ -104,11 +111,16 @@ jobs:
         # "iris" installs Iris with the Sodium-family renderer it runs on: Sodium, or
         # Embeddium with Oculus on Forge 1.20.1. Any other value names one renderer.
         renderers: [none, iris]
+        exclude:
+          - node: 26.3-neoforge
+            renderers: iris
         include:
           - node: 1.21.1-neoforge
             renderers: embeddium
           - node: 1.20.1-forge
             renderers: rubidium
+          - node: 26.3-neoforge
+            renderers: sodium
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4

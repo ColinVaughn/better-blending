@@ -26,7 +26,7 @@ import static org.lwjgl.opengl.GL33C.*;
 @Mixin(value = ExtendedShader.class, remap = false)
 public abstract class IrisSamplersMixin {
     @Shadow @Final private float alphaTest;
-    /** bb_Enabled, bb_AlphaCutoff, then each mirrored uniform; resolved on first use. */
+    /* bb_Enabled, bb_AlphaCutoff, then each mirrored uniform; resolved on first use. */
     @Unique private int[] betterBlending$locations;
 
     // Every pack program is offered these; only programs IrisShaders patched declare the
@@ -49,6 +49,21 @@ public abstract class IrisSamplersMixin {
     // Iris has just made this program current and set its own uniforms.
     @Inject(method = "iris$setupState", at = @At("TAIL"))
     private void betterBlending$uniforms(CallbackInfo ci) {
+        var locations = betterBlending$resolveLocations();
+        if (locations[0] < 0) return; // Not a program blending patched.
+        boolean enabled = TerrainShader.rendererReady();
+        glUniform1i(locations[0], enabled ? 1 : 0);
+        glUniform1f(locations[1], alphaTest);
+        if (!enabled) return;
+        var program = TerrainShader.program();
+        for (int i = 0; i < TerrainUniforms.MIRRORED.length; i++) {
+            float[] values = program.uniformValues(TerrainUniforms.MIRRORED[i]);
+            if (values != null && locations[2 + i] >= 0) betterBlending$uniform(locations[2 + i], values);
+        }
+    }
+
+    @Unique
+    private int[] betterBlending$resolveLocations() {
         if (betterBlending$locations == null) {
             int program = ((GlProgram) (Object) this).getProgramId();
             var locations = new int[2 + TerrainUniforms.MIRRORED.length];
@@ -59,22 +74,16 @@ public abstract class IrisSamplersMixin {
             }
             betterBlending$locations = locations;
         }
-        var locations = betterBlending$locations;
-        if (locations[0] < 0) return; // Not a program blending patched.
-        boolean enabled = TerrainShader.rendererReady();
-        glUniform1i(locations[0], enabled ? 1 : 0);
-        glUniform1f(locations[1], alphaTest);
-        if (!enabled) return;
-        var program = TerrainShader.program();
-        for (int i = 0; i < TerrainUniforms.MIRRORED.length; i++) {
-            float[] values = program.uniformValues(TerrainUniforms.MIRRORED[i]);
-            if (values == null || locations[2 + i] < 0) continue;
-            switch (values.length) {
-                case 1 -> glUniform1f(locations[2 + i], values[0]);
-                case 2 -> glUniform2f(locations[2 + i], values[0], values[1]);
-                case 3 -> glUniform3f(locations[2 + i], values[0], values[1], values[2]);
-                default -> throw new IllegalStateException("Unexpected uniform size " + values.length);
-            }
+        return betterBlending$locations;
+    }
+
+    @Unique
+    private static void betterBlending$uniform(int location, float[] values) {
+        switch (values.length) {
+            case 1 -> glUniform1f(location, values[0]);
+            case 2 -> glUniform2f(location, values[0], values[1]);
+            case 3 -> glUniform3f(location, values[0], values[1], values[2]);
+            default -> throw new IllegalStateException("Unexpected uniform size " + values.length);
         }
     }
 
@@ -84,7 +93,7 @@ public abstract class IrisSamplersMixin {
         return ((GlTexture) atlas.getTexture()).glId();
     }
 
-    /** One of the cache's textures, or none while this frame's cache is not uploaded. */
+    /* One of the cache's textures, or none while this frame's cache is not uploaded. */
     @Unique
     private static int betterBlending$cache(int index) {
         var texture = TerrainShader.rendererTexture(index);

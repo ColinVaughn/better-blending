@@ -9,8 +9,8 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/**
- {@code -PsmokeTest} on 1.20.1. The GL-era shaders are covered by the GPU tests on the
+/*
+ -PsmokeTest on 1.20.1. The GL-era shaders are covered by the GPU tests on the
  primary node; what those cannot reach is Iris's own transform, so with Iris installed
  this links a pack program through it, then exits. The GL context is current and Iris
  initialised by the end of the game's constructor.

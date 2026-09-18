@@ -40,7 +40,7 @@ public final class BlendingConfigScreen {
         strength(entries, blending, "strength", config.surfaceShaderStrength(), 100,
                 value -> config.surface_shader_strength = value);
         blending.addEntry(entries.startBooleanToggle(text("texture_aligned"), config.textureAlignedBlending())
-                .setDefaultValue(false).setTooltip(text("texture_aligned.tooltip"))
+                .setDefaultValue(true).setTooltip(text("texture_aligned.tooltip"))
                 .setSaveConsumer(value -> config.texture_aligned_blending = value).build());
         strength(entries, blending, "local", config.localBlendStrength(), 100,
                 value -> config.local_blend_strength = value);

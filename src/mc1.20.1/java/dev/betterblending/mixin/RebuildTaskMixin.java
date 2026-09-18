@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/**
+/*
  Before 1.20.2 there is no SectionCompiler; a rebuild task compiles its chunk itself.
  The task and its result type are package-private, so neither is named here. Everything
  is taken from compile as it runs. The task reaches its chunk only through a synthetic

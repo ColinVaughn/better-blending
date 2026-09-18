@@ -27,14 +27,14 @@ import java.util.Optional;
  without a code change.
  */
 public final class ModernProgram implements TerrainProgram {
-    /** std140 size of BlendParams. The linked GL program reports the same 80 bytes. */
+    /* std140 size of BlendParams. The linked GL program reports the same 80 bytes. */
     private static final int PARAMS_SIZE = 80;
     private static final Identifier SHADER = Identifier.fromNamespaceAndPath("better_blending", "core/terrain");
     private static final BindGroupLayout LAYOUT = layout();
 
     private final Map<String, float[]> uniforms = new HashMap<>();
     private final Map<String, TerrainTexture> samplers = new LinkedHashMap<>();
-    /** A chunk renderer's pipelines and our copies of them; empty where a copy failed to compile. */
+    /* A chunk renderer's pipelines and our copies of them; empty where a copy failed to compile. */
     private final Map<RenderPipeline, Optional<RenderPipeline>> rendererPipelines = new IdentityHashMap<>();
     private @Nullable RenderPipeline solid, cutout;
     private @Nullable GpuBuffer params;
@@ -70,9 +70,7 @@ public final class ModernProgram implements TerrainProgram {
                     GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_COPY_DST, PARAMS_SIZE);
         }
         try (var stack = MemoryStack.stackPush()) {
-            // Member order and types match terrain_params.glsl exactly, which puts every
-            // vec3 first: putVec3 advances 16 bytes, so a float after one would land 4
-            // bytes past where std140 places it.
+            // Order must match terrain_params.glsl; see the layout note there.
             var data = Std140Builder.onStack(stack, PARAMS_SIZE)
                     .putVec3(value("VolumeOrigin", 0), value("VolumeOrigin", 1), value("VolumeOrigin", 2))
                     .putVec3(value("BiomeOffset", 0), value("BiomeOffset", 1), value("BiomeOffset", 2))

@@ -7,7 +7,7 @@ import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 import java.util.List;
 import java.util.Set;
 
-/**
+/*
  Makes sure MixinExtras is running before these mixins apply. Fabric Loader starts it
  itself; Forge 1.20.1 does not ship it at all, and the bundled copy only starts itself
  once Forge has unpacked it, which a development launch never does. Starting it again

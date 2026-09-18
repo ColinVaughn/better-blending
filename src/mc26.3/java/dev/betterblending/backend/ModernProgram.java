@@ -28,17 +28,17 @@ import java.util.Optional;
  release that tunes terrain state is therefore picked up without a code change.
  */
 public final class ModernProgram implements TerrainProgram {
-    /** std140 size of BlendParams. The linked GL program reports the same 80 bytes. */
+    /* std140 size of BlendParams. The linked GL program reports the same 80 bytes. */
     private static final int PARAMS_SIZE = 80;
     private static final Identifier SHADER = Identifier.fromNamespaceAndPath("better_blending", "core/terrain");
     private static final BindGroupLayout LAYOUT = layout();
-    /** Vanilla's opaque terrain pipelines, one per draw path: separate draws and multidraw. */
+    /* Vanilla's opaque terrain pipelines, one per draw path: separate draws and multidraw. */
     private static final List<RenderPipeline> VANILLA = List.of(RenderPipelines.SOLID_TERRAIN,
             RenderPipelines.CUTOUT_TERRAIN, RenderPipelines.SOLID_TERRAIN_MULTIDRAW, RenderPipelines.CUTOUT_TERRAIN_MULTIDRAW);
 
     private final Map<String, float[]> uniforms = new HashMap<>();
     private final Map<String, TerrainTexture> samplers = new LinkedHashMap<>();
-    /** Pipelines we stand in for, vanilla's and a chunk renderer's, and our copies; empty where a copy failed to compile. */
+    /* Pipelines we stand in for, vanilla's and a chunk renderer's, and our copies; empty where a copy failed to compile. */
     private final Map<RenderPipeline, Optional<RenderPipeline>> copies = new IdentityHashMap<>();
     private @Nullable GpuBuffer params;
 
@@ -72,9 +72,7 @@ public final class ModernProgram implements TerrainProgram {
                     GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_COPY_DST, PARAMS_SIZE);
         }
         try (var stack = MemoryStack.stackPush()) {
-            // Member order and types match terrain_params.glsl exactly, which puts every
-            // vec3 first: putVec3 advances 16 bytes, so a float after one would land 4
-            // bytes past where std140 places it.
+            // Order must match terrain_params.glsl; see the layout note there.
             var data = Std140Builder.onStack(stack, PARAMS_SIZE)
                     .putVec3(value("VolumeOrigin", 0), value("VolumeOrigin", 1), value("VolumeOrigin", 2))
                     .putVec3(value("BiomeOffset", 0), value("BiomeOffset", 1), value("BiomeOffset", 2))
@@ -133,7 +131,7 @@ public final class ModernProgram implements TerrainProgram {
         }).orElse(null);
     }
 
-    /**
+    /*
      Compiles a copy into the current pipeline cache, where later draws find it. A copy
      that fails is not cached there, so the caller must remember the failure.
      */

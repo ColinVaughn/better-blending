@@ -169,7 +169,7 @@ class TerrainShaderTest {
         assertFalse(config.dimensionEnabled(custom));
     }
 
-    /** Render the shipped shader stages with real atlas textures and block geometry. */
+    /* Render the shipped shader stages with real atlas textures and block geometry. */
     @Test
     @EnabledIfEnvironmentVariable(named = "BB_SHADER_GL_TEST", matches = "1")
     void actualSurfaceBoundaryKeepsCrispTexturesAndDoesNotRepaintInteriors() throws Exception {
@@ -332,8 +332,7 @@ class TerrainShaderTest {
             glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 128, 128, GL_RGBA, GL_FLOAT, surfaceMap(false, false));
             assertArrayEquals(blended, draw(vertices), 0.001F, "Disabling the regional layer must restore the block-only version");
 
-            // View the side of a single step directly. The old XZ pattern made
-            // every changed pixel run down the full height as a vertical stripe.
+            // View the side of a single step directly; changes must not run down it as stripes.
             glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 128, 128, GL_RGBA, GL_FLOAT, surfaceMap(false, false));
             vertices = wall(program);
             glUniformMatrix4fv(glGetUniformLocation(program, "ModelViewMat"), false,
@@ -527,7 +526,7 @@ class TerrainShaderTest {
             volume.move(-64, -64, -64);
             for (var face : net.minecraft.core.Direction.values()) {
                 for (int height : new int[]{32, 48}) {
-                    // Separate parallel surfaces in the SAME volume must never alias each other.
+                    // Parallel surfaces in the same volume must not alias each other.
                     for (int u = 25; u < 39; u++) for (int v = 25; v < 39; v++) {
                         int x = face.getAxis() == net.minecraft.core.Direction.Axis.X ? height : u;
                         int y = face.getAxis() == net.minecraft.core.Direction.Axis.Y ? height : v;
@@ -591,7 +590,7 @@ class TerrainShaderTest {
     }
 
     private void checkFirstFrame(int program, int vertices, Path review) throws Exception {
-        // Same geometry, same camera, initially missing data: reproduce the old on-screen catch-up.
+        // Same geometry and camera, with data arriving after the first frame.
         glActiveTexture(GL_TEXTURE0);
         com.mojang.blaze3d.systems.RenderSystem.bindTexture(0);
         try (var cold = new TerrainVolume(128)) {
@@ -625,7 +624,7 @@ class TerrainShaderTest {
             System.out.println("Readiness reproduction: " + changed + " pixels repainted after late publication; prepared frames remain identical.");
             save(review.resolve("readiness-old-first-frame.png"), missing);
             save(review.resolve("readiness-prepared-first-frame.png"), settled);
-            // The production before-draw publication is complete and idempotent, even after turning/recentering.
+            // Publishing before each draw is complete and idempotent across frames.
             for (int frame = 0; frame < 5; frame++) {
                 cold.beginPublication();
                 for (var data : ready) cold.publish(data);
@@ -1309,7 +1308,7 @@ class TerrainShaderTest {
         return steps ? 80 + Math.floorDiv(z - 24, 4) + (x == 30 && z == 30 ? 5 : 0) : 80;
     }
 
-    /** Local edges and a world-aligned four-block sampling grid for wider transitions. */
+    /* Local edges and a world-aligned four-block sampling grid for wider transitions. */
     static int boundaryFlags(com.mojang.blaze3d.platform.NativeImage map, int x, int z, int originX, int originZ) {
         int own = map.getPixelRGBA(x, z) & 4095;
         if (own == 0) return 0;

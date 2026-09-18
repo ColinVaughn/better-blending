@@ -46,15 +46,22 @@ final class TerrainVolume implements AutoCloseable {
     }
 
     boolean contains(int x, int y, int z) {
-        return x >= originX && x < originX + size && y >= originY && y < originY + size
-                && z >= originZ && z < originZ + size;
+        return within(x, originX, size) && within(y, originY, size) && within(z, originZ, size);
+    }
+
+    private static boolean within(int value, int start, int length) {
+        return value >= start && value < start + length;
+    }
+
+    /* The page holding a block, or -1 when the block is outside the volume or has no page. */
+    private int slotAt(int x, int y, int z) {
+        return contains(x, y, z) ? slots.get(SectionPos.asLong(x >> 4, y >> 4, z >> 4)) : -1;
     }
 
     static int localIndex(int x, int y, int z) { return (x & 15) | ((z & 15) << 4) | ((y & 15) << 8); }
 
     int get(int x, int y, int z) {
-        if (!contains(x, y, z)) return 0;
-        int slot = slots.get(SectionPos.asLong(x >> 4, y >> 4, z >> 4));
+        int slot = slotAt(x, y, z);
         if (slot < 0) return 0;
         int local = localIndex(x, y, z);
         return blocks.get((slot % 32) * 64 + (local & 63), (slot / 32) * 64 + (local >> 6));
@@ -112,19 +119,21 @@ final class TerrainVolume implements AutoCloseable {
 
     void invalidateDonors(java.util.List<TerrainSections.Data> ready) {
         var affected = new BitSet();
-        for (var data : ready) if (changed(data)) {
-            // A formerly visible neighbor can still own a stale page. Release it too,
-            // so the updated halo can replace it even when that neighbor is now culled.
-            for (int y = -1; y <= 1; y++) for (int z = -1; z <= 1; z++) for (int x = -1; x <= 1; x++) {
-                int slot = slots.get(SectionPos.asLong((data.x() >> 4) + x, (data.y() >> 4) + y, (data.z() >> 4) + z));
-                if (slot >= 0) affected.set(slot);
-            }
-        }
+        // A formerly visible neighbor can still own a stale page. Release it too,
+        // so the updated halo can replace it even when that neighbor is now culled.
+        for (var data : ready) if (changed(data)) markNeighborhood(affected, data);
         for (int slot = affected.nextSetBit(0); slot >= 0; slot = affected.nextSetBit(slot + 1)) {
             owners[slot] = null;
             clearPage(slot);
         }
         revision++;
+    }
+
+    private void markNeighborhood(BitSet affected, TerrainSections.Data data) {
+        for (int y = -1; y <= 1; y++) for (int z = -1; z <= 1; z++) for (int x = -1; x <= 1; x++) {
+            int slot = slots.get(SectionPos.asLong((data.x() >> 4) + x, (data.y() >> 4) + y, (data.z() >> 4) + z));
+            if (slot >= 0) affected.set(slot);
+        }
     }
 
     void beginPublication() { pinned.clear(); rejected.clear(); }
@@ -144,13 +153,7 @@ final class TerrainVolume implements AutoCloseable {
         int slot = allocate(SectionPos.asLong(data.x() >> 4, data.y() >> 4, data.z() >> 4));
         if (slot < 0) return;
         pinned.set(slot);
-        int halo = data.radius() > 0 ? 1 : 0;
-        for (int y = -halo; y <= halo; y++) for (int z = -halo; z <= halo; z++) for (int x = -halo; x <= halo; x++) {
-            int wx = data.x() + x * 16, wy = data.y() + y * 16, wz = data.z() + z * 16;
-            if (!contains(wx, wy, wz)) continue;
-            int donor = slots.get(SectionPos.asLong(wx >> 4, wy >> 4, wz >> 4));
-            if (donor >= 0) pinned.set(donor);
-        }
+        pinDonors(data);
         if (owners[slot] == data && published[slot] == revision) return;
         if (owners[slot] != data) {
             clearPage(slot);
@@ -163,22 +166,34 @@ final class TerrainVolume implements AutoCloseable {
             int x = data.x() + index % width - data.radius();
             int z = data.z() + index / width % width - data.radius();
             int y = data.y() + index / (width * width) - data.radius();
-            if (!contains(x, y, z)) continue;
-            int target = slots.get(SectionPos.asLong(x >> 4, y >> 4, z >> 4));
-            // Donor halos fill missing pages, never overwrite another section's complete snapshot.
-            if (target != slot && target >= 0 && owners[target] != null) continue;
-            set(x, y, z, entries[i + 1], entries[i + 2]);
-            if (target < 0) {
-                target = slots.get(SectionPos.asLong(x >> 4, y >> 4, z >> 4));
-                if (target >= 0) pinned.set(target);
-            }
+            if (contains(x, y, z)) writeEntry(slot, x, y, z, entries[i + 1], entries[i + 2]);
         }
         published[slot] = revision;
     }
 
+    private void pinDonors(TerrainSections.Data data) {
+        int halo = data.radius() > 0 ? 1 : 0;
+        for (int y = -halo; y <= halo; y++) for (int z = -halo; z <= halo; z++) for (int x = -halo; x <= halo; x++) {
+            int donor = slotAt(data.x() + x * 16, data.y() + y * 16, data.z() + z * 16);
+            if (donor >= 0) pinned.set(donor);
+        }
+    }
+
+    private void writeEntry(int slot, int x, int y, int z, int block, int color) {
+        long key = SectionPos.asLong(x >> 4, y >> 4, z >> 4);
+        int target = slots.get(key);
+        // Donor halos fill missing pages, never overwrite another section's complete snapshot.
+        if (target != slot && target >= 0 && owners[target] != null) return;
+        set(x, y, z, block, color);
+        if (target < 0) {
+            target = slots.get(key);
+            if (target >= 0) pinned.set(target);
+        }
+    }
+
     void addFlags(int x, int y, int z, int flags, boolean replace) {
-        int slot = slots.get(SectionPos.asLong(x >> 4, y >> 4, z >> 4));
-        if (slot < 0 || !contains(x, y, z)) return;
+        int slot = slotAt(x, y, z);
+        if (slot < 0) return;
         int local = localIndex(x, y, z), px = slot % 32 * 64 + (local & 63), py = slot / 32 * 64 + (local >> 6);
         int value = blocks.get(px, py);
         blocks.set(px, py, (replace ? value & ~12288 : value) | flags);
@@ -194,7 +209,7 @@ final class TerrainVolume implements AutoCloseable {
 
     private void writeIndex(long key, int value) {
         int x = SectionPos.x(key) - (originX >> 4), y = SectionPos.y(key) - (originY >> 4), z = SectionPos.z(key) - (originZ >> 4);
-        if (x < 0 || x >= sections || y < 0 || y >= sections || z < 0 || z >= sections) return;
+        if (!within(x, 0, sections) || !within(y, 0, sections) || !within(z, 0, sections)) return;
         index.set(x + z * sections, y, value);
         indexDirty = true;
     }

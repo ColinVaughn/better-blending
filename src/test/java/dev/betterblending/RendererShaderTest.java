@@ -44,7 +44,7 @@ class RendererShaderTest {
         assertEquals(pack.replace("gtexture", "colortex0"), dev.betterblending.compat.IrisShaders.fragment(pack.replace("gtexture", "colortex0")));
     }
 
-    /**
+    /*
      Upstream renderer builds whose terrain shaders the GL-era patch adapts, each mapped to
      the asset namespace its shaders live under. The build passes each jar by name.
      */
@@ -77,6 +77,32 @@ class RendererShaderTest {
         while (imports.find()) imports.appendReplacement(result,
                 java.util.regex.Matcher.quoteReplacement(source(renderer, imports.group(1), imports.group(2))));
         return imports.appendTail(result).toString();
+    }
+
+    /*
+     Addon shaders load through the same loader at the same path under their own namespace.
+     Patching one, or a renderer build with renamed inputs, produces GLSL that does not compile.
+     */
+    @Test void patchClaimsOnlyTheRenderersOwnTerrainShader() throws Exception {
+        for (String renderer : RENDERERS.keySet()) {
+            String namespace = RENDERERS.get(renderer);
+            for (String extension : new String[]{"vsh", "fsh"}) {
+                String path = "blocks/block_layer_opaque." + extension;
+                String source = source(renderer, namespace, path);
+                assertTrue(RendererShaders.patches(namespace, path, source), renderer + " " + extension);
+                // An addon's own copy of the same shader, under its own namespace.
+                assertFalse(RendererShaders.patches("omegaflashlight", path, source), renderer + " " + extension);
+                assertFalse(RendererShaders.patches(namespace, "blocks/block_layer_translucent." + extension, source));
+                // A source with no entry point to rename, and one with two of them.
+                assertFalse(RendererShaders.patches(namespace, path, source.replace("void main()", "void addon_main()")));
+                assertFalse(RendererShaders.patches(namespace, path, source + "\nvoid main() { }"));
+            }
+            // A build that renames one of the names the patch reads keeps its own source.
+            assertFalse(RendererShaders.patches(namespace, "blocks/block_layer_opaque.vsh",
+                    source(renderer, namespace, "blocks/block_layer_opaque.vsh").replace("u_RegionOffset", "u_Origin")));
+            assertFalse(RendererShaders.patches(namespace, "blocks/block_layer_opaque.fsh",
+                    source(renderer, namespace, "blocks/block_layer_opaque.fsh").replace("_linearFog", "_fog")));
+        }
     }
 
     @Test void adaptersKeepOriginalFallbackAndSharedBlending() throws Exception {

@@ -22,6 +22,7 @@ public abstract class IrisProgramsMixin {
     // programs are built by createShadow instead and stay unblended.
     @WrapOperation(method = "create", at = @At(value = "INVOKE",
             target = "Lnet/irisshaders/iris/pipeline/transform/TransformPatcher;patchSodium(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lnet/irisshaders/iris/gl/blending/AlphaTest;Lit/unimi/dsi/fastutil/objects/Object2ObjectMap;Ljava/util/Set;Z)Ljava/util/Map;"))
+    @SuppressWarnings("PMD.ExcessiveParameterList") // Mirrors the target's parameters.
     private static Map<PatchShaderType, String> betterBlending$albedo(String name, String vertex, String geometry,
             String tessControl, String tessEval, String fragment, AlphaTest alpha, Object2ObjectMap<?, ?> textures,
             Set<String> overrides, boolean flag, Operation<Map<PatchShaderType, String>> original) {

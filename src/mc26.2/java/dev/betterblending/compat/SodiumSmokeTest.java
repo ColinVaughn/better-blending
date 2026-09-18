@@ -39,7 +39,7 @@ public final class SodiumSmokeTest {
         return passed;
     }
 
-    /** Reaches Sodium's pipeline factory. Never draws; the smoke test exits first. */
+    /* Reaches Sodium's pipeline factory. Never draws; the smoke test exits first. */
     private static final class Probe extends ShaderChunkRenderer {
         Probe() {
             super(ChunkMeshFormats.COMPACT);

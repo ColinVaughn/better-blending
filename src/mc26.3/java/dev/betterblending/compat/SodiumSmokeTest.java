@@ -41,7 +41,7 @@ public final class SodiumSmokeTest {
         return passed;
     }
 
-    /** Reaches Sodium's pipeline factory. Never draws; the smoke test exits first. */
+    /* Reaches Sodium's pipeline factory. Never draws; the smoke test exits first. */
     private static final class Probe extends ShaderChunkRenderer {
         Probe() {
             super(ChunkMeshFormats.COMPACT);
@@ -57,6 +57,7 @@ public final class SodiumSmokeTest {
         }
 
         @Override
+        @SuppressWarnings("PMD.ExcessiveParameterList") // Sodium's interface fixes the signature.
         public void render(ChunkRenderMatrices matrices, ChunkRenderListIterable lists, TerrainRenderPass pass,
                 CameraTransform camera, FogParameters fog, boolean sortTranslucent, RenderPass renderPass,
                 GpuSampler sampler, GpuBufferSlice globals, GpuBuffer sectionTimes, OitStage stage) {

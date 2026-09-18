@@ -81,21 +81,7 @@ public final class TerrainShader {
             return;
         }
         int requestedSize = Math.min(config.surfaceMapSize(), minecraft.options.getEffectiveRenderDistance() * 32 + 64) / 16 * 16;
-        if (level != minecraft.level || sections == null) {
-            clear();
-            level = minecraft.level;
-            sections = new TerrainSections();
-            // Config/resource changes need fresh companion data for existing meshes too.
-            //? if >=26.1 {
-            /*minecraft.levelExtractor.allChanged();
-            *///?} else {
-            minecraft.levelRenderer.allChanged();
-            //?}
-        }
-        if (volume == null || volume.size != requestedSize) {
-            if (volume != null) volume.close();
-            volume = new TerrainVolume(requestedSize);
-        }
+        ensureCache(minecraft, requestedSize);
         Vec3 eye = camera./*? if >=26.1 {*/ /*position *//*?} else {*/ getPosition /*?}*/();
         volume.move((Math.floorDiv(Mth.floor(eye.x), 16) - volume.sections / 2) * 16,
                 (Math.floorDiv(Mth.floor(eye.y), 16) - volume.sections / 2) * 16,
@@ -127,6 +113,24 @@ public final class TerrainShader {
         program.uniform("SunDirection", -Mth.sin(angle), level.dimensionType().hasSkyLight() ? Mth.cos(angle) : -1.0F, 0.0F);
         program.flush();
         active = true;
+    }
+
+    private static void ensureCache(Minecraft minecraft, int volumeSize) {
+        if (level != minecraft.level || sections == null) {
+            clear();
+            level = minecraft.level;
+            sections = new TerrainSections();
+            // Config/resource changes need fresh companion data for existing meshes too.
+            //? if >=26.1 {
+            /*minecraft.levelExtractor.allChanged();
+            *///?} else {
+            minecraft.levelRenderer.allChanged();
+            //?}
+        }
+        if (volume == null || volume.size != volumeSize) {
+            if (volume != null) volume.close();
+            volume = new TerrainVolume(volumeSize);
+        }
     }
 
     /** The list has already passed Minecraft's section occlusion graph and frustum culling. */
@@ -168,7 +172,7 @@ public final class TerrainShader {
         rendererPrepared = true;
     }
 
-    /** The blending cache's textures, in the order the renderer-compat path expects. */
+    /* The blending cache's textures, in the order the renderer-compat path expects. */
     private static TerrainTexture[] rendererTextures() {
         var materials = sections.materials;
         return new TerrainTexture[]{volume.index, volume.blocks, volume.colors,

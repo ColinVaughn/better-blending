@@ -7,7 +7,7 @@ import org.spongepowered.asm.service.MixinService;
 import java.util.List;
 import java.util.Set;
 
-/** Applies a renderer compat mixin only when its target renderer is installed. Shared by every era. */
+/* Applies a renderer compat mixin only when its target renderer is installed. Shared by every era. */
 public final class RendererMixinPlugin implements IMixinConfigPlugin {
     @Override public boolean shouldApplyMixin(String target, String mixin) {
         try {

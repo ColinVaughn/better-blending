@@ -12,6 +12,7 @@ import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.BlockAndTintGetter;
 //?}
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
 import java.util.Collections;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -46,53 +47,108 @@ public final class TerrainSections implements AutoCloseable {
     static Data bake(BlockGetter region, BlockPos origin, int radius, ToLongFunction<BlockPos> sample) {
         int width = 16 + radius * 2, length = width * width * width;
         int[] blocks = new int[length], colors = new int[length];
+        sampleBlocks(region, origin, radius, sample, blocks, colors);
+        return new Data(origin.getX(), origin.getY(), origin.getZ(), radius, pack(blocks, colors, width, radius));
+    }
+
+    private static void sampleBlocks(BlockGetter region, BlockPos origin, int radius, ToLongFunction<BlockPos> sample,
+                                     int[] blocks, int[] colors) {
+        int width = 16 + radius * 2;
         var position = new BlockPos.MutableBlockPos();
         var neighbor = new BlockPos.MutableBlockPos();
         for (int y = 0; y < width; y++) for (int z = 0; z < width; z++) for (int x = 0; x < width; x++) {
             position.set(origin.getX() + x - radius, origin.getY() + y - radius, origin.getZ() + z - radius);
-            var state = region.getBlockState(position);
-            if (state.isAir() || !state.getFluidState().isEmpty() || state.hasBlockEntity()) continue;
-            int exposed = 0;
-            for (var face : FACES) {
-                neighbor.setWithOffset(position, face);
-                //? if >=26.1 {
-                /*if (Block.shouldRenderFace(state, region.getBlockState(neighbor), face)) exposed |= 1 << face.get3DDataValue();
-                *///?} else {
-                if (Block.shouldRenderFace(state, region, position, face, neighbor)) exposed |= 1 << face.get3DDataValue();
-                //?}
-            }
-            if (exposed == 0) continue; // Reuse Minecraft's face culling before model/tint work.
-            long value = sample.applyAsLong(position);
-            if ((value & 4095) == 0) continue;
+            long value = sampleExposed(region, position, neighbor, sample);
+            if (value == 0) continue;
             int index = (y * width + z) * width + x;
-            blocks[index] = (int) value | exposed << 16;
+            blocks[index] = (int) value;
             colors[index] = (int) (value >>> 32);
         }
+    }
+
+    /* Index, block and color of every sampled block, with boundary flags on the section's own blocks. */
+    private static int[] pack(int[] blocks, int[] colors, int width, int radius) {
+        int[][] strides = strides(width);
         var result = new IntArrayList();
         for (int y = 0; y < width; y++) for (int z = 0; z < width; z++) for (int x = 0; x < width; x++) {
             int index = (y * width + z) * width + x, packed = blocks[index];
             if (packed == 0) continue;
-            if (x >= radius && x < radius + 16 && y >= radius && y < radius + 16 && z >= radius && z < radius + 16) {
-                if (radius > 0 && boundary(blocks, width, x, y, z, 1, packed)) packed |= 12288;
-                else if (radius > 1 && boundary(blocks, width, x, y, z, radius, packed)) packed |= 8192;
-            }
+            if (inSection(x, y, z, radius)) packed |= boundaryBits(blocks, strides, index, radius, packed);
             result.add(index); result.add(packed); result.add(colors[index]);
         }
-        return new Data(origin.getX(), origin.getY(), origin.getZ(), radius, result.toIntArray());
+        return result.toIntArray();
     }
 
-    private static boolean boundary(int[] blocks, int width, int x, int y, int z, int radius, int packed) {
-        int own = packed & 4095;
+    /* The sample with the block's exposed faces in bits 16 to 21, or 0 when there is nothing to blend. */
+    private static long sampleExposed(BlockGetter region, BlockPos.MutableBlockPos position,
+                                      BlockPos.MutableBlockPos neighbor, ToLongFunction<BlockPos> sample) {
+        var state = region.getBlockState(position);
+        if (state.isAir() || !state.getFluidState().isEmpty() || state.hasBlockEntity()) return 0;
+        int exposed = exposedFaces(region, position, neighbor, state);
+        if (exposed == 0) return 0; // Reuse Minecraft's face culling before model/tint work.
+        long value = sample.applyAsLong(position);
+        if ((value & 4095) == 0) return 0;
+        return value | (long) exposed << 16;
+    }
+
+    private static int exposedFaces(BlockGetter region, BlockPos position, BlockPos.MutableBlockPos neighbor, BlockState state) {
+        int exposed = 0;
+        for (var face : FACES) {
+            neighbor.setWithOffset(position, face);
+            //? if >=26.1 {
+            /*if (Block.shouldRenderFace(state, region.getBlockState(neighbor), face)) exposed |= 1 << face.get3DDataValue();
+            *///?} else {
+            if (Block.shouldRenderFace(state, region, position, face, neighbor)) exposed |= 1 << face.get3DDataValue();
+            //?}
+        }
+        return exposed;
+    }
+
+    /* Whether a halo coordinate lies in the section itself rather than its neighbors. */
+    private static boolean inSection(int x, int y, int z, int radius) {
+        return inside(x, radius) && inside(y, radius) && inside(z, radius);
+    }
+
+    private static boolean inside(int coordinate, int radius) {
+        return coordinate >= radius && coordinate < radius + 16;
+    }
+
+    private static int boundaryBits(int[] blocks, int[][] strides, int index, int radius, int packed) {
+        if (radius > 0 && boundary(blocks, strides, index, 1, packed)) return 12288;
+        if (radius > 1 && boundary(blocks, strides, index, radius, packed)) return 8192;
+        return 0;
+    }
+
+    /* Per face, the index steps along its normal and then its two tangents, u and v. */
+    private static int[][] strides(int width) {
+        int[][] strides = new int[FACES.length][];
+        for (var face : FACES) {
+            int x = 1, y = width * width, z = width;
+            strides[face.get3DDataValue()] = switch (face.getAxis()) {
+                case X -> new int[]{x, z, y};
+                case Y -> new int[]{y, x, z};
+                case Z -> new int[]{z, x, y};
+            };
+        }
+        return strides;
+    }
+
+    private static boolean boundary(int[] blocks, int[][] strides, int index, int radius, int packed) {
         for (var face : FACES) {
             int exposure = 1 << (16 + face.get3DDataValue());
-            if ((packed & exposure) == 0) continue;
-            for (int v = -radius; v <= radius; v++) for (int u = -radius; u <= radius; u++) for (int n = -1; n <= 1; n++) {
-                int dx = face.getAxis() == Direction.Axis.X ? n : u;
-                int dy = face.getAxis() == Direction.Axis.Y ? n : v;
-                int dz = face.getAxis() == Direction.Axis.Z ? n : face.getAxis() == Direction.Axis.X ? u : v;
-                int other = blocks[((y + dy) * width + z + dz) * width + x + dx];
-                if ((other & exposure) != 0 && (other & 4095) != 0 && (other & 4095) != own) return true;
+            if ((packed & exposure) != 0
+                    && boundaryOnFace(blocks, strides[face.get3DDataValue()], index, radius, packed, exposure)) {
+                return true;
             }
+        }
+        return false;
+    }
+
+    private static boolean boundaryOnFace(int[] blocks, int[] stride, int index, int radius, int packed, int exposure) {
+        int own = packed & 4095;
+        for (int v = -radius; v <= radius; v++) for (int u = -radius; u <= radius; u++) for (int n = -1; n <= 1; n++) {
+            int other = blocks[index + n * stride[0] + u * stride[1] + v * stride[2]];
+            if ((other & exposure) != 0 && (other & 4095) != 0 && (other & 4095) != own) return true;
         }
         return false;
     }

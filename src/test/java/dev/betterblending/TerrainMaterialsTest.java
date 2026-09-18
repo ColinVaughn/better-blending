@@ -79,16 +79,16 @@ class TerrainMaterialsTest {
                         default -> throw new UnsupportedOperationException(method.getName());
                     });
             for (int order = 0; order < 2; order++) {
-                var faces = TerrainMaterials.faces(model, null);
+                var faces = TerrainFaces.faces(model, null);
                 assertSame(base, faces[3]);
                 assertSame(overlay, faces[9]);
                 java.util.Collections.reverse(quads);
             }
             overlayVertices[4] = Float.floatToRawIntBits(0.75F);
-            assertNull(TerrainMaterials.faces(model, null)[3], "Mismatched layer UVs must keep vanilla rendering");
+            assertNull(TerrainFaces.faces(model, null)[3], "Mismatched layer UVs must keep vanilla rendering");
             overlayVertices[4] = Float.floatToRawIntBits(0.5F);
             quads.add(overlay);
-            assertNull(TerrainMaterials.faces(model, null)[3], "Unsupported extra layers must not be flattened");
+            assertNull(TerrainFaces.faces(model, null)[3], "Unsupported extra layers must not be flattened");
         }
     }
 
@@ -122,10 +122,10 @@ class TerrainMaterialsTest {
         Bootstrap.bootStrap();
         var grassLayer = ItemBlockRenderTypes.getChunkRenderType(Blocks.GRASS_BLOCK.defaultBlockState());
         assertSame(RenderType.cutoutMipped(), grassLayer);
-        assertTrue(TerrainMaterials.supportsLayer(grassLayer), "Grass was excluded by the old solid-only filter");
-        assertTrue(TerrainMaterials.supportsLayer(ItemBlockRenderTypes.getChunkRenderType(Blocks.SAND.defaultBlockState())));
-        assertTrue(TerrainMaterials.supportsLayer(RenderType.cutout()));
-        assertFalse(TerrainMaterials.supportsLayer(RenderType.translucent()));
+        assertTrue(TerrainFaces.supportsLayer(grassLayer), "Grass was excluded by the old solid-only filter");
+        assertTrue(TerrainFaces.supportsLayer(ItemBlockRenderTypes.getChunkRenderType(Blocks.SAND.defaultBlockState())));
+        assertTrue(TerrainFaces.supportsLayer(RenderType.cutout()));
+        assertFalse(TerrainFaces.supportsLayer(RenderType.translucent()));
     }
 
     @Test
@@ -140,18 +140,18 @@ class TerrainMaterialsTest {
                     case "getQuads" -> args[1] == Direction.UP ? List.of(quad) : List.of();
                     default -> throw new UnsupportedOperationException(method.getName());
                 });
-        assertSame(quad, TerrainMaterials.faces(modModel, null)[Direction.UP.get3DDataValue()]);
-        assertNull(TerrainMaterials.faces(modModel, null)[Direction.NORTH.get3DDataValue()]);
+        assertSame(quad, TerrainFaces.faces(modModel, null)[Direction.UP.get3DDataValue()]);
+        assertNull(TerrainFaces.faces(modModel, null)[Direction.NORTH.get3DDataValue()]);
         BakedModel layeredModel = (BakedModel) Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{BakedModel.class},
                 (proxy, method, args) -> switch (method.getName()) {
                     case "isCustomRenderer" -> false;
                     case "getQuads" -> args[1] == Direction.UP || args[1] == null ? List.of(quad) : List.of();
                     default -> throw new UnsupportedOperationException(method.getName());
                 });
-        assertNull(TerrainMaterials.faces(layeredModel, null)[Direction.UP.get3DDataValue()],
+        assertNull(TerrainFaces.faces(layeredModel, null)[Direction.UP.get3DDataValue()],
                 "Layered faces must retain both base and overlay, including unculled overlays");
         vertices[1] = Float.floatToRawIntBits(0.5F);
-        assertFalse(TerrainMaterials.fullFace(quad), "Partial/custom geometry must not be repainted as a cube");
+        assertFalse(TerrainFaces.fullFace(quad), "Partial/custom geometry must not be repainted as a cube");
     }
 
     @Test

@@ -40,12 +40,7 @@ public final class VanillaBackend implements TerrainBackend {
         for (String name : TerrainUniforms.MIRRORED) {
             float[] values = program.uniformValues(name);
             if (values == null) continue;
-            int location = glGetUniformLocation(glProgram, iris ? "bb_" + name : name);
-            switch (values.length) {
-                case 1 -> glUniform1f(location, values[0]);
-                case 2 -> glUniform2f(location, values[0], values[1]);
-                case 3 -> glUniform3f(location, values[0], values[1], values[2]);
-            }
+            uniform(glGetUniformLocation(glProgram, iris ? "bb_" + name : name), values);
         }
         if (iris) return; // Iris's sampler allocator binds our textures alongside the pack's.
         int activeTexture = glGetInteger(GL_ACTIVE_TEXTURE);
@@ -60,6 +55,14 @@ public final class VanillaBackend implements TerrainBackend {
         }
         glActiveTexture(activeTexture);
         bound = true;
+    }
+
+    private static void uniform(int location, float[] values) {
+        switch (values.length) {
+            case 1 -> glUniform1f(location, values[0]);
+            case 2 -> glUniform2f(location, values[0], values[1]);
+            case 3 -> glUniform3f(location, values[0], values[1], values[2]);
+        }
     }
 
     @Override

@@ -19,6 +19,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The changelog falls back to the commits since the previous tag.
+          fetch-depth: 0
       - name: Check the tag matches mod.version
         run: |
           version=$(sed -n 's/^mod\.version=//p' gradle.properties | tr -d '\r')
@@ -31,6 +34,8 @@ jobs:
           pattern: better-blending-*
           path: jars
           merge-multiple: true
+      - name: Write changelog
+        run: bash .github/scripts/changelog.sh "${GITHUB_REF_NAME}" > "${RUNNER_TEMP}/changelog.md"
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -41,4 +46,14 @@ jobs:
           gh release create "${GITHUB_REF_NAME}" $files \
             --repo "${GITHUB_REPOSITORY}" \
             --title "Better Blending ${GITHUB_REF_NAME#v}" \
-            --notes "One jar per Minecraft version and loader."
+            --notes-file "${RUNNER_TEMP}/changelog.md"
+
+  # A release created with the workflow token does not trigger other workflows, so
+  # CurseForge is published from here rather than on the release event.
+  curseforge:
+    needs: release
+    uses: ./.github/workflows/curseforge.yml
+    with:
+      tag: ${{ github.ref_name }}
+    secrets:
+      CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}

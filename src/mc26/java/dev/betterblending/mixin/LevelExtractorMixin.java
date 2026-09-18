@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/** Block invalidation moved from LevelRenderer to LevelExtractor in 26.1. */
+/* Block invalidation moved from LevelRenderer to LevelExtractor in 26.1. */
 @Mixin(LevelExtractor.class)
 public abstract class LevelExtractorMixin {
     @Shadow public abstract void setBlocksDirty(int minX, int minY, int minZ, int maxX, int maxY, int maxZ);

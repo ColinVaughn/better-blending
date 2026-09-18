@@ -15,13 +15,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import java.util.EnumMap;
 import java.util.Map;
 
-/** Iris 1.7 on Fabric and Oculus 1.8 on Forge, which share this code. */
+/* Iris 1.7 on Fabric and Oculus 1.8 on Forge, which share this code. */
 @Pseudo
 @Mixin(value = TransformPatcher.class, remap = false)
 public abstract class IrisProgramsMixin {
     // Iris transforms each pack program for Sodium's terrain here, from a lambda per
     // pass, so the result is taken on the way out. Shadow passes stay unblended.
     @Inject(method = "patchSodium", at = @At("RETURN"), cancellable = true)
+    @SuppressWarnings("PMD.ExcessiveParameterList") // Mirrors the target's parameters.
     private static void betterBlending$albedo(String name, String vertex, String geometry, String tessControl,
             String tessEval, String fragment, AlphaTest alpha, ShaderAttributeInputs inputs,
             Object2ObjectMap<?, ?> textures, CallbackInfoReturnable<Map<PatchShaderType, String>> cir) {

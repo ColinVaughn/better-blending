@@ -32,7 +32,7 @@ import java.util.Locale;
 
 import static org.lwjgl.opengl.GL32C.*;
 
-/** Opt-in GPU timers, excluding CPU submission/readback and VSync. */
+/* Opt-in GPU timers, excluding CPU submission/readback and VSync. */
 final class ShaderBenchmark {
     private ShaderBenchmark() { }
 

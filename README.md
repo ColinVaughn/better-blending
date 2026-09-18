@@ -7,11 +7,9 @@ A client-side mod that smooths the transitions between terrain materials, so san
 | 1.20.1 | Fabric, Forge | 17 |
 | 1.21.1 | Fabric, NeoForge | 21 |
 | 26.2 | Fabric, NeoForge | 25 |
-| 26.3 | Fabric | 25 |
+| 26.3 | Fabric, NeoForge | 25 |
 
-26.3 on NeoForge will follow once NeoForge 26.3 leaves beta and Iris and Cloth Config publish NeoForge builds for it.
-
-Blending also works with Sodium and Iris on every version, with Embeddium on 1.20.1 and 1.21.1, and with Rubidium and Oculus on 1.20.1. See [Renderer compatibility](#renderer-compatibility).
+Blending also works with Sodium on every version, with Iris everywhere it has a release, with Embeddium on 1.20.1 and 1.21.1, and with Rubidium and Oculus on 1.20.1. See [Renderer compatibility](#renderer-compatibility).
 
 Materials are discovered automatically from baked models, so there is no block or texture-name allowlist to keep up to date. That covers biome tints, one-block transitions, wider regional transitions, surface detail and cutout faces, with visible-surface updates kept bounded. Blending is on by default in every dimension, the End and modded dimensions included, and they all share one configurable effect with independent samples for floors, walls and ceilings at any height.
 
@@ -26,7 +24,7 @@ The build is a [Stonecutter](https://stonecutter.kikugie.dev/) matrix. Each targ
 # Or: .\gradlew.bat "1.21.1-neoforge:runClient"
 ```
 
-Install the jar for your setup from `versions/<node>/build/libs/`, for example `better-blending-1.21.1-fabric-0.2.0.jar` or `better-blending-1.21.1-neoforge-0.2.0.jar`. Fabric also needs Fabric API. The mod is client-only; servers do not need it.
+Install the jar for your setup from `versions/<node>/build/libs/`, for example `better-blending-1.21.1-fabric-0.3.0.jar` or `better-blending-1.21.1-neoforge-0.3.0.jar`. Fabric also needs Fabric API. The mod is client-only; servers do not need it.
 
 One thing to watch if you are working on the source: Stonecutter keeps the working tree in the shape of one *active* node and rewrites `src/` in place when you switch, so switch back to `1.21.1-fabric` before committing.
 
@@ -50,7 +48,7 @@ Without those optional mods, edit `config/better-blending.json`, created on firs
   "terrain_biome_blend_strength": 0.45,
   "surface_shader_strength": 1.0,
   "local_blend_strength": 1.0,
-  "texture_aligned_blending": false,
+  "texture_aligned_blending": true,
   "surface_detail_strength": 1.0,
   "surface_map_size": 256,
   "surface_refresh_ticks": 20,
@@ -62,7 +60,7 @@ Strengths clamp to 0-1. Local and regional strengths control nearby and wider tr
 
 `enabled` is the master switch. To exclude specific dimensions, add their IDs, such as `minecraft:the_end` or `modid:dimension`, to `disabled_dimensions`.
 
-`texture_aligned_blending` keeps transitions and added detail aligned to the receiving block's texture pixels, which cuts down on mixed pixel sizes ("mixels"). It follows the face UVs and the current resource pack resolution on all six cube faces. Off by default; normal distance filtering stays active either way.
+`texture_aligned_blending` keeps transitions and added detail aligned to the receiving block's texture pixels, which cuts down on mixed pixel sizes ("mixels"). It follows the face UVs and the current resource pack resolution on all six cube faces. On by default; turn it off for the original blending style. Normal distance filtering stays active either way.
 
 `surface_map_size` bounds the camera-centered GPU cache to 64-256 blocks per side, rounded down to whole sections. Smaller regions mean less coverage and less memory.
 
@@ -78,6 +76,8 @@ $env:BB_SHADER_GL_TEST='1'
 .\gradlew.bat "1.21.1-fabric:test" --rerun-tasks
 # Optional GPU benchmarks: also set BB_SHADER_BENCHMARK=1.
 ```
+
+Each node's `build` also runs PMD complexity limits (rules in `config/pmd/complexity.xml`) on its production sources. Run `.\gradlew.bat "<node>:pmdMain"` to check one node, and see `versions/<node>/build/reports/pmd/main.html` for details.
 
 Two development checks cover what compiling cannot.
 
@@ -95,7 +95,7 @@ Add `-Prenderer=<name>` or `-Piris` to either check to bring in the renderer ada
 .\gradlew.bat "1.20.1-forge:runClient" -PsmokeTest -Piris
 ```
 
-CI (`.github/workflows/build.yml`) builds every node, runs the shader tests on software OpenGL, and runs the mixin audit on every node, both without renderers and with Sodium and Iris installed, plus Embeddium on 1.21.1 NeoForge and Rubidium on 1.20.1 Forge.
+CI (`.github/workflows/build.yml`) builds every node, runs the shader tests on software OpenGL, and runs the mixin audit on every node, both without renderers and with Sodium and Iris installed, plus Embeddium on 1.21.1 NeoForge, Rubidium on 1.20.1 Forge, and Sodium on its own on 26.3 NeoForge.
 
 The regression suite covers baked faces, grass and cutout layers, stacked cave floors, all six face directions, first-frame readiness, retained snapshots, culled interiors, real GLSL rendering, local and regional transitions, tint, camera stability, high material IDs and protected interiors. GPU checks need an OpenGL context and write review images to `versions/1.21.1-fabric/build/shader-review/`. Fixtures render with vanilla Minecraft textures from the development game assets.
 
@@ -139,7 +139,7 @@ The integration handles direct `texture`, `textureLod` and `textureGrad` reads o
 
 **Minecraft 26.2** targets **Sodium 0.9.2** and **Iris 1.11.4** on Fabric and NeoForge. Sodium 0.9 draws terrain through render pipelines, so Better Blending compiles a copy of each opaque Sodium pipeline with blending patched into Sodium's own shader and draws with that copy while no shader pack is active. With a pack enabled, the pack's terrain program is patched as on 1.21.1, with the same limits. No Embeddium release exists for 26.2. I've looked at a 26.2 world with the vanilla renderer, but not yet with Sodium or under a shader pack.
 
-**Minecraft 26.3** targets **Sodium 0.9.2** and **Iris 1.11.6** on Fabric and works as on 26.2. 26.3 moved the GPU layer into a new API with both OpenGL and Vulkan backends and compiles every shader to SPIR-V, even for OpenGL; both backends are supported. I've looked at a 26.3 world with the vanilla renderer and with Sodium, on both OpenGL and Vulkan. Under a shader pack, not yet.
+**Minecraft 26.3** targets **Sodium 0.9.2** on Fabric and NeoForge and **Iris 1.11.6** on Fabric, and works as on 26.2. 26.3 moved the GPU layer into a new API with both OpenGL and Vulkan backends and compiles every shader to SPIR-V, even for OpenGL; both backends are supported. I've looked at a 26.3 world on Fabric with the vanilla renderer and with Sodium, on both OpenGL and Vulkan. Under a shader pack, and on NeoForge, not yet.
 
 **Minecraft 1.20.1** targets **Sodium 0.5.13** and **Iris 1.7.6** on Fabric, and **Embeddium 0.3.31** or **Rubidium 0.7.1** with **Oculus 1.8.0** on Forge. Oculus requires Embeddium. All three descend from Sodium 0.5 and share one adapter, and shader packs are handled as on 1.21.1 with the same limits. Embeddium logs that the game is "tainted" whenever another mod hooks its internals, which Better Blending does and so does Oculus; that is Embeddium disclaiming support, not an error. I haven't looked at a 1.20.1 world with these renderers yet.
 
@@ -150,6 +150,7 @@ Development launches (`-Piris` also installs the renderer Iris runs on: Sodium, 
 .\gradlew.bat "1.21.1-neoforge:runClient" -Prenderer=embeddium
 .\gradlew.bat "1.21.1-fabric:runClient" -Piris
 .\gradlew.bat "26.2-neoforge:runClient" -Piris
+.\gradlew.bat "26.3-neoforge:runClient" -Prenderer=sodium
 .\gradlew.bat "1.20.1-forge:runClient" -Prenderer=rubidium
 .\gradlew.bat "1.20.1-forge:runClient" -Piris
 ```

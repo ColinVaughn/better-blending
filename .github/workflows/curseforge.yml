@@ -1,0 +1,55 @@
+name: CurseForge
+
+# Uploads the jars of an existing GitHub release. The Release workflow calls this after
+# publishing; running it by hand re-publishes a tag, and a dry run shows what each file
+# would declare without uploading.
+#
+# Needs the CURSEFORGE_TOKEN secret (an API token from
+# https://legacy.curseforge.com/account/api-tokens) and the CURSEFORGE_PROJECT_ID
+# repository variable.
+on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+    secrets:
+      CURSEFORGE_TOKEN:
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag, for example v0.2.0
+        type: string
+        required: true
+      dry-run:
+        description: Show the upload metadata without uploading
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish to CurseForge
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          # The changelog falls back to the commits since the previous tag.
+          fetch-depth: 0
+      - name: Download release jars
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "${{ inputs.tag }}" --repo "${GITHUB_REPOSITORY}" --pattern '*.jar' --dir jars
+      - name: Write changelog
+        run: bash .github/scripts/changelog.sh "${{ inputs.tag }}" > "${RUNNER_TEMP}/changelog.md"
+      - name: Upload
+        env:
+          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+          CURSEFORGE_PROJECT_ID: ${{ vars.CURSEFORGE_PROJECT_ID }}
+        run: >-
+          bash .github/scripts/curseforge.sh "${{ inputs.tag }}" jars "${RUNNER_TEMP}/changelog.md"
+          ${{ inputs.dry-run && '--dry-run' || '' }}

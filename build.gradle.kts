@@ -3,7 +3,7 @@
 
 plugins {
     java
-    // One jar provides both plugins; each node applies the one its Minecraft needs.
+    pmd
     id("dev.architectury.loom") version "1.17.493" apply false
     id("dev.architectury.loom-no-remap") version "1.17.493" apply false
     id("dev.kikugie.stonecutter")
@@ -43,10 +43,8 @@ stonecutter.constants {
 }
 
 // Pure renames go here rather than into directives; the checked-in tree keeps the
-// primary node's spelling. Note that a false direction rewrites the other way, so the
-// new name must not appear as a word in shared sources for any other reason. Matching
-// whole words leaves names that merely contain it, such as glsl-transformer's
-// getIdentifier(), alone.
+// primary node's spelling. A false direction rewrites the other way, so the new name
+// must not appear as a whole word in shared sources for any other reason.
 stonecutter.replacements {
     regex(unobfuscated) { // Renamed in 26.1.
         replace("\\bResourceLocation\\b", "Identifier", "\\bIdentifier\\b", "ResourceLocation")
@@ -81,7 +79,7 @@ sourceSets {
     }
 }
 
-/** The first of this node's era directories that holds the named file. */
+// The first of this node's era directories that holds the named file.
 fun eraFile(path: String): File = eraSources.map { rootProject.file("src/$it/$path") }.firstOrNull(File::isFile)
     ?: error("No era directory of ${stonecutter.current.project} has $path (era.sources=$eraSources)")
 
@@ -161,6 +159,7 @@ dependencies {
 
     val sodium = propOrNull("sodium.version")
     val iris = propOrNull("iris.version")
+    val irisCompile = iris ?: propOrNull("iris.compile.version")
     // Iris is published as Oculus for Forge; the API packages are the same.
     val irisSlug = propOrNull("iris.slug") ?: "iris"
     val embeddium = propOrNull("embeddium.version")
@@ -172,7 +171,7 @@ dependencies {
         // Sodium for NeoForge on 26.x is such a wrapper.
         if (loader == "neoforge") compileOnly(nestedJars("maven.modrinth:sodium:$sodium"))
     }
-    if (iris != null) modCompileOnly("maven.modrinth:$irisSlug:$iris")
+    if (irisCompile != null) modCompileOnly("maven.modrinth:$irisSlug:$irisCompile")
     if (embeddium != null) modCompileOnly("maven.modrinth:embeddium:$embeddium")
 
     when (loader) {
@@ -214,6 +213,7 @@ dependencies {
     // Every node is configured, but only the launched one needs its renderer, so a
     // choice a node cannot run fails that node's launch rather than the whole build.
     val unsupported = when {
+        withIris && iris == null -> "No Iris for ${stonecutter.current.project}"
         withIris && renderer != irisHost -> "Iris on ${stonecutter.current.project} runs on $irisHost"
         renderer != null && propOrNull("$renderer.version") == null -> "No $renderer for ${stonecutter.current.project}"
         else -> null
@@ -250,7 +250,7 @@ dependencies {
 }
 
 // The suite exercises GLSL and GPU behaviour that does not vary by loader, so it
-// runs on the primary node only. See the design doc for what CI covers elsewhere.
+// runs on the primary node only; CI covers the other nodes with the mixin audit.
 // Stonecutter wires src/test into every node by itself, so the other nodes have to
 // have it taken away again; otherwise they compile the suite without JUnit present.
 if (isPrimary) {
@@ -313,9 +313,8 @@ tasks.processResources {
     }
 }
 
-// Tier 0. The backend package is the contract that makes one source tree serve every
-// era, so it must never name a Minecraft type; the shared GLSL core must likewise stay
-// era-neutral. Both are easy to break by reflex and silent until another era is added.
+// The backend package must never name a Minecraft type, and the shared GLSL core must
+// stay era-neutral. Breaking either goes unnoticed until another era is added.
 val checkVersionFreeSources = tasks.register("checkVersionFreeSources") {
     group = "verification"
     description = "Fails if the version-free backend or shared GLSL gains an era dependency."
@@ -352,5 +351,16 @@ val checkVersionFreeSources = tasks.register("checkVersionFreeSources") {
     }
 }
 tasks.named("check") { dependsOn(checkVersionFreeSources) }
+
+// Complexity limits on production code. `check` runs them on this node's sources, so
+// each node's CI build covers its own era code. The GPU scenario tests are long by
+// design and stay out of it. Reports land in build/reports/pmd.
+pmd {
+    toolVersion = "7.27.0"
+    ruleSets = emptyList()
+    ruleSetFiles = files(rootProject.file("config/pmd/complexity.xml"))
+    isConsoleOutput = true
+}
+tasks.named("pmdTest") { enabled = false }
 
 tasks.withType<Jar>().configureEach { from(rootProject.file("LICENSE")) }

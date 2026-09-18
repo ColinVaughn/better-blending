@@ -32,6 +32,7 @@ public abstract class GameRendererMixin {
 
     // Before 1.21 the level render takes a pose stack and partial tick rather than a DeltaTracker.
     @WrapOperation(method = "renderLevel", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/LevelRenderer;renderLevel(Lcom/mojang/blaze3d/vertex/PoseStack;FJZLnet/minecraft/client/Camera;Lnet/minecraft/client/renderer/GameRenderer;Lnet/minecraft/client/renderer/LightTexture;Lorg/joml/Matrix4f;)V"))
+    @SuppressWarnings("PMD.ExcessiveParameterList") // Mirrors the target's parameters.
     private void betterBlending$shadeTerrain(LevelRenderer renderer, PoseStack pose, float partialTick, long nanos,
                                              boolean outline, Camera camera, GameRenderer gameRenderer,
                                              LightTexture lightTexture, Matrix4f projection, Operation<Void> original) {

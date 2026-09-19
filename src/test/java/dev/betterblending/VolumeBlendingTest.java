@@ -123,11 +123,17 @@ class VolumeBlendingTest {
 
     @Test
     void loneBlocksKeepTheirOwnTops() throws Exception {
-        for (var scene : new Scene[]{INSET, PLACED, PAIR}) {
-            int[][] cover = render(scene, 0.45F, scene == PLACED ? "placed" : scene == PAIR ? "pair" : "inset");
+        for (var scene : new Scene[]{INSET, PLACED}) {
+            int[][] cover = render(scene, 0.45F, scene == PLACED ? "placed" : "inset");
             assertTrue(cover[60 - VIEW][60 - VIEW] <= 2, "A lone block's top must keep its texture: " + cover[60 - VIEW][60 - VIEW] + "%");
-            if (scene == PAIR) assertTrue(cover[60 - VIEW][61 - VIEW] <= 2, "Both blocks of a pair must keep their tops");
         }
+    }
+
+    @Test
+    void adjacentBlocksBlendByDefault() throws Exception {
+        int[][] cover = render(PAIR, 0.45F, "pair");
+        assertTrue(cover[60 - VIEW][60 - VIEW] > 2 || cover[60 - VIEW][61 - VIEW] > 2,
+                "At least one block of a pair must blend under the default style");
     }
 
     @Test

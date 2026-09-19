@@ -1,3 +1,37 @@
+#version 150
+#moj_import <fog.glsl>
+
+// Host-owned declarations for the vanilla pre-1.21.5 pipeline, where uniforms are
+// loose and fog comes from Mojang's fog.glsl.
+uniform sampler2D Sampler0;
+uniform float AlphaCutoff;
+uniform vec4 ColorModulator;
+uniform float FogStart;
+uniform float FogEnd;
+uniform vec4 FogColor;
+in float vertexDistance;
+in vec4 vertexColor;
+in vec2 texCoord0;
+flat in vec3 faceNormal;
+out vec4 fragColor;
+
+#define BB_SAMPLE_BASE(uv) texture(Sampler0, uv)
+#define BB_FOG(color) linear_fog(color, vertexDistance, FogStart, FogEnd, FogColor)
+
+// Blending's own scalar and vector uniforms, declared loose. Eras and renderers that
+// bind loose uniforms prepend this to terrain_core.glsl. From 1.21.5 loose uniforms
+// no longer exist, so those eras declare these same names in a uniform block instead.
+uniform float VolumeMode;
+uniform vec3 VolumeOrigin;
+uniform float SurfaceStrength;
+uniform vec3 SunDirection;
+uniform vec3 BiomeOffset;
+uniform float BlendStrength;
+uniform float BiomeBlendStrength;
+uniform float LocalBlendStrength;
+uniform float TextureAlignedBlending;
+uniform vec2 NoiseOffset;
+
 // Terrain blending algorithm, shared by every Minecraft version and by the
 // Sodium/Iris paths. It declares only what blending owns.
 //
@@ -20,15 +54,6 @@ in vec3 biomePosition;
 #endif
 vec3 samplePosition;
 vec2 planeOffset;
-// Texture sizes, queried once per fragment. A size query can cost as much as a fetch.
-int volumeSections;
-ivec2 mapSize;
-vec2 atlasSize;
-// This face's bit in the volume's exposed-face mask, checked by every surface probe, and
-// where its two probe-hint bits sit: in the high or low half of a block texel, at hintBit.
-int faceBit;
-bool hintHigh;
-int hintBit;
 int faceIndex();
 
 vec2 decodePair(vec4 data) {
@@ -46,22 +71,11 @@ ivec3 planeBlock(ivec2 cell, int height) {
     if (abs(faceNormal.x) > 0.5) return ivec3(faceNormal.x > 0.0 ? height : -height - 1, cell.y, cell.x);
     return ivec3(cell.x, cell.y, faceNormal.z > 0.0 ? height : -height - 1);
 }
-// Height probes and neighbors nearly always share a section. Remembering its page
-// removes a dependent index read from most volume lookups.
-ivec3 cachedSection = ivec3(-1);
-int cachedPage = -1;
-bool cachedHinted = false;
 ivec2 volumePixel(ivec3 block) {
-    int sections = volumeSections;
+    int sections = textureSize(VolumeSampler, 0).y;
     if (any(lessThan(block, ivec3(0))) || any(greaterThanEqual(block, ivec3(sections * 16)))) return ivec2(-1);
     ivec3 section = block / 16;
-    if (section != cachedSection) {
-        cachedSection = section;
-        vec2 entry = decodePair(texelFetch(VolumeSampler, ivec2(section.x + section.z * sections, section.y), 0));
-        cachedPage = int(entry.x) - 1;
-        cachedHinted = entry.y > 0.0;
-    }
-    int page = cachedPage;
+    int page = int(decodePair(texelFetch(VolumeSampler, ivec2(section.x + section.z * sections, section.y), 0)).x) - 1;
     if (page < 0) return ivec2(-1);
     int local = (block.x & 15) | ((block.z & 15) << 4) | ((block.y & 15) << 8);
     return ivec2(page % 32, page / 32) * 64 + ivec2(local & 63, local >> 6);
@@ -70,35 +84,24 @@ vec3 volumeSurface(ivec3 block, float height) {
     ivec2 pixel = volumePixel(block);
     if (pixel.x < 0) return vec3(0.0);
     vec2 data = decodePair(texelFetch(BiomeSampler, pixel, 0));
-    if ((int(data.y) & faceBit) == 0) return vec3(0.0);
+    if ((int(data.y) & (1 << faceIndex())) == 0) return vec3(0.0);
     return vec3(float(int(data.x) & 4095), height, float(int(data.x) & 12288));
 }
 vec3 surfaceAt(ivec2 cell) {
     if (VolumeMode > 0.5) {
         int height = int(floor(samplePosition.y - 0.001));
-        ivec2 pixel = volumePixel(planeBlock(cell, height));
-        // Pages their own section published also say, per face, which block along the normal is
-        // exposed when this one is not (1 below, 2 above, 0 neither; see TerrainSections.probeHints).
-        // Most lookups find nothing, and learn that in one read instead of three.
-        if (pixel.x >= 0 && cachedHinted) {
-            vec2 block = decodePair(texelFetch(BiomeSampler, pixel, 0));
-            if ((int(block.y) & faceBit) != 0) return vec3(float(int(block.x) & 4095), float(height + 1), float(int(block.x) & 12288));
-            int hint = ((hintHigh ? int(block.y) : int(block.x)) >> hintBit) & 3;
-            if (hint == 1) return volumeSurface(planeBlock(cell, height - 1), float(height));
-            return hint == 2 ? volumeSurface(planeBlock(cell, height + 1), float(height + 2)) : vec3(0.0);
+        for (int i = 0; i < 3; i++) {
+            int h = height + (i == 0 ? 0 : i == 1 ? -1 : 1);
+            vec3 data = volumeSurface(planeBlock(cell, h), float(h + 1));
+            if (data.x > 0.0) return data;
         }
-        // Same height first, then one below, then one above.
-        vec3 data = volumeSurface(planeBlock(cell, height), float(height + 1));
-        if (data.x == 0.0) data = volumeSurface(planeBlock(cell, height - 1), float(height));
-        if (data.x == 0.0) data = volumeSurface(planeBlock(cell, height + 1), float(height + 2));
-        return data;
+        return vec3(0.0);
     }
-    ivec2 size = mapSize;
+    ivec2 size = textureSize(BiomeSampler, 0);
     if (any(lessThan(cell, ivec2(0))) || any(greaterThanEqual(cell, size))) return vec3(0.0, -32768.0, 0.0);
     vec2 data = decodePair(texelFetch(BiomeSampler, cell, 0));
     return vec3(float(int(data.x) & 4095), data.y - 32768.0, float(int(data.x) & 12288));
 }
-// A surface's tint, with alpha 0 for a lone block (see LoneBlocks).
 vec4 surfaceColor(ivec2 cell, float height) {
     ivec2 pixel = VolumeMode > 0.5 ? volumePixel(planeBlock(cell, int(height) - 1)) : cell;
     return pixel.x < 0 ? vec4(1.0) : texelFetch(SurfaceColors, pixel, 0);
@@ -108,10 +111,10 @@ vec3 surfaceTint(ivec2 cell, float height) {
 }
 float coverage(vec3 position) {
     if (VolumeMode > 0.5) {
-        vec3 edge = min(biomePosition, vec3(volumeSections * 16) - biomePosition);
+        vec3 edge = min(biomePosition, vec3(textureSize(VolumeSampler, 0).y * 16) - biomePosition);
         return smoothstep(2.0, 18.0, min(edge.x, min(edge.y, edge.z)));
     }
-    vec2 edge = min(position.xz, vec2(mapSize) - position.xz);
+    vec2 edge = min(position.xz, vec2(textureSize(BiomeSampler, 0)) - position.xz);
     return smoothstep(2.0, 18.0, min(edge.x, edge.y));
 }
 int faceIndex() {
@@ -123,7 +126,7 @@ int faceIndex() {
 vec4 rect(int material, int face) {
     return vec4(decodePair(texelFetch(MaterialSampler, ivec2(face * 3, material), 0)),
                 decodePair(texelFetch(MaterialSampler, ivec2(face * 3 + 1, material), 0)))
-                / vec4(atlasSize, atlasSize);
+                / vec4(textureSize(Sampler0, 0), textureSize(Sampler0, 0));
 }
 vec3 flags(int material, int face) {
     return texelFetch(MaterialSampler, ivec2(face * 3 + 2, material), 0).rgb * 255.0;
@@ -131,55 +134,17 @@ vec3 flags(int material, int face) {
 bool inRect(vec2 uv, vec4 bounds) {
     return all(greaterThanEqual(uv, bounds.xy)) && all(lessThan(uv, bounds.zw));
 }
-// A host that samples terrain its own way says how here: BB_RGSS is true while it
-// supersamples, and BB_LOD_BIAS is any mip bias it applies (see the 26.x prologues).
-#ifndef BB_RGSS
-#define BB_RGSS false
-#endif
-#ifndef BB_LOD_BIAS
-#define BB_LOD_BIAS 0.0
-#endif
-// Blending samples the atlas at coordinates of its own: borrowed textures, and both layers
-// of a layered face such as a grass side. From 26.1 the atlas filters linearly and vanilla
-// snaps to texels in the shader, so a plain textureGrad would come out blurred. These follow
-// vanilla's sampleNearest and sampleRGSS with explicit gradients. On a nearest-filtered atlas
-// the snapped coordinate lands in the same texel, so older versions look the same as before.
-vec4 nearestTexel(vec2 uv, vec2 du, vec2 dv) {
-    vec2 pixelSize = 1.0 / atlasSize;
-    vec2 texelScreenSize = max(sqrt(du * du + dv * dv), vec2(1e-9));
-    vec2 texel = uv / pixelSize;
-    vec2 center = round(texel) - 0.5;
-    vec2 offset = clamp((texel - center - 0.5) * pixelSize / texelScreenSize + 0.5, 0.0, 1.0);
-    float bias = exp2(BB_LOD_BIAS);
-    return textureGrad(Sampler0, (center + offset) * pixelSize, du * bias, dv * bias);
-}
-vec4 atlasTexel(vec2 uv, vec2 du, vec2 dv) {
-    if (!(BB_RGSS)) return nearestTexel(uv, du, dv);
-    vec2 pixelSize = 1.0 / atlasSize;
-    vec2 texelScreenSize = sqrt(du * du + dv * dv);
-    float minPixelSize = min(pixelSize.x, pixelSize.y);
-    float blend = smoothstep(minPixelSize, minPixelSize * 2.0, max(texelScreenSize.x, texelScreenSize.y));
-    float shortest = min(length(du), length(dv)), longest = max(length(du), length(dv));
-    float mip = max(0.0, log2(sqrt(shortest * longest) / minPixelSize));
-    const vec2 offsets[4] = vec2[](vec2(0.125, 0.375), vec2(-0.125, -0.375), vec2(0.375, -0.125), vec2(-0.375, 0.125));
-    vec4 low = vec4(0.0), high = vec4(0.0);
-    for (int i = 0; i < 4; i++) {
-        low += textureLod(Sampler0, uv + offsets[i] * pixelSize, floor(mip));
-        high += textureLod(Sampler0, uv + offsets[i] * pixelSize, floor(mip) + 1.0);
-    }
-    return mix(nearestTexel(uv, du, dv), mix(low, high, fract(mip)) * 0.25, blend);
-}
 vec4 materialColor(int material, int face, vec2 uv, vec2 gradX, vec2 gradY, vec3 tint) {
     vec4 bounds = rect(material, face);
     vec2 span = bounds.zw - bounds.xy;
     if (any(lessThanEqual(span, vec2(0.0)))) return vec4(0.0);
     vec3 properties = flags(material, face);
-    vec4 color = atlasTexel(bounds.xy + uv * span, gradX * span, gradY * span);
+    vec4 color = textureGrad(Sampler0, bounds.xy + uv * span, gradX * span, gradY * span);
     if (properties.x > 0.5) color.rgb *= tint;
     if (properties.z > 0.5) {
         bounds = rect(material, face + 6);
         span = bounds.zw - bounds.xy;
-        vec4 overlay = atlasTexel(bounds.xy + uv * span, gradX * span, gradY * span);
+        vec4 overlay = textureGrad(Sampler0, bounds.xy + uv * span, gradX * span, gradY * span);
         if (overlay.a >= 0.5) {
             color.rgb = overlay.rgb * tint;
             color.a = max(color.a, overlay.a);
@@ -215,8 +180,6 @@ float choiceNoise(vec3 world, vec3 key, int scale) {
     // a band of one shared noise field (which draws nested contour rings).
     vec3 seed = floor(vec3(hash(key), hash(key + 29.0), hash(key + 71.0)) * 128.0);
     float value = mix(noise((texel + 0.5) / 4.0 + seed), hash(texel + seed), 0.35);
-    // Some two-block noise clumps regional edges on the ground. Much more than this and a
-    // clump fills whole blocks, which reads as the block having been replaced.
     if (scale > 1 && faceNormal.y > 0.5)
         value = mix(noise((texel + 0.5) / 32.0 + seed), value, 0.65);
     // Restore contrast lost to interpolation so small donor weights can still win.
@@ -234,7 +197,6 @@ float neighborWeight(ivec2 cell, vec3 surface, float height, float scale, vec2 p
     vec2 distance = abs(vec2(cell) + 0.5 - position);
     vec2 tent = max(vec2(1.5) - distance / scale, vec2(0.0));
     float rise = abs(surface.y - height);
-    // Nearby, a surface one step up or down lends half as much as a level one.
     float across = scale < 1.5 && rise > 0.5 ? 0.5 : 1.0;
     return tent.x * tent.y * across * (1.0 - smoothstep(1.0, 3.0, rise));
 }
@@ -249,22 +211,6 @@ bool connectedSurface(ivec2 from, ivec2 to, float height, float targetHeight) {
         height = surface.y;
     }
     return abs(targetHeight - height) <= 1.0;
-}
-
-// A neighbor's color as a donor: its own material when that differs and joins this surface.
-vec4 donorColor(vec4 source, int ownMaterial, vec3 ownTint, ivec2 cell, ivec2 neighbor, vec3 data,
-                float height, int face, vec2 uv, vec2 gradX, vec2 gradY, int scale) {
-    // Rejected donors retain their source weight; renormalizing would amplify distant samples.
-    if (int(data.x) == ownMaterial || !connectedSurface(cell, neighbor, height, data.y)) return source;
-    vec4 tint = surfaceColor(neighbor, data.y);
-    // A lone block lends only to the blocks beside it, never a regional patch.
-    if (scale > 1 && tint.a < 0.5) return source;
-    vec4 color = materialColor(int(data.x), face, uv, gradX, gradY, tint.rgb);
-    // Transparent neighbor texels must not punch holes in solid ground.
-    if (color.a < 0.5) return source;
-    color.rgb /= ownTint;
-    color.a = source.a;
-    return color;
 }
 
 vec4 blendTerrain(vec4 source, int ownMaterial, ivec2 cell, float height, int face,
@@ -292,9 +238,6 @@ vec4 blendTerrain(vec4 source, int ownMaterial, ivec2 cell, float height, int fa
     float integrate = smoothstep(0.045 * float(scale), 0.125 * float(scale), footprint);
     vec4 selected = source;
     vec4 average = vec4(0.0);
-    ivec2 bestNeighbor = cell;
-    vec3 bestData = vec3(0.0);
-    bool pending = false;
     for (int z = -1; z <= 1; z++) for (int x = -1; x <= 1; x++) {
         ivec2 neighbor = base + ivec2(x, z) * scale;
         vec3 data = surfaceAt(neighbor);
@@ -308,26 +251,26 @@ vec4 blendTerrain(vec4 source, int ownMaterial, ivec2 cell, float height, int fa
             choose = score < best;
             if (choose) best = score;
         }
-        if (integrate > 0.0) {
-            vec4 color = donorColor(source, ownMaterial, ownTint, cell, neighbor, data, height, face, uv, gradX, gradY, scale);
-            if (choose) selected = color;
-            average += color * weight;
-        } else if (choose) {
-            // Only the final winner's color is used, so resolve it once after the scan
-            // instead of walking and sampling every interim leader.
-            bestNeighbor = neighbor;
-            bestData = data;
-            pending = true;
+        if (!choose && integrate <= 0.0) continue;
+        vec4 color = source;
+        // Rejected donors retain their source weight; renormalizing would amplify distant samples.
+        vec4 tint = surfaceColor(neighbor, data.y);
+        // Lone blocks lend no regional patches.
+        if (int(data.x) != ownMaterial && connectedSurface(cell, neighbor, height, data.y) && (scale == 1 || tint.a >= 0.5)) {
+            color = materialColor(int(data.x), face, uv, gradX, gradY, tint.rgb);
+            // Transparent neighbor texels must not punch holes in solid ground.
+            if (color.a < 0.5) color = source;
+            else color.rgb /= ownTint;
+            color.a = source.a;
         }
+        if (choose) selected = color;
+        if (integrate > 0.0) average += color * weight;
     }
     if (total <= 0.0) return source;
-    bool sourceWins = false;
     if (integrate < 1.0 && retained > 0.0) {
         float sourceScore = -log(choiceNoise(world, vec3(vec2(cell) + planeOffset, float(scale) + 19.0), scale)) / retained;
-        sourceWins = best * (total / strength) >= sourceScore;
+        if (best * (total / strength) >= sourceScore) selected = source;
     }
-    if (sourceWins) selected = source;
-    else if (pending) selected = donorColor(source, ownMaterial, ownTint, cell, bestNeighbor, bestData, height, face, uv, gradX, gradY, scale);
     average = source * retained + average * (strength / total);
     return mix(selected, average, integrate);
 }
@@ -357,9 +300,6 @@ vec3 shadeSurface(vec3 color, vec3 world, float footprint) {
 void bb_terrain_main() {
     vec4 source = BB_SAMPLE_BASE(texCoord0);
     vec4 albedo = source;
-    if (VolumeMode > 0.5) volumeSections = textureSize(VolumeSampler, 0).y;
-    else mapSize = textureSize(BiomeSampler, 0);
-    atlasSize = vec2(textureSize(Sampler0, 0));
     // Derivatives precede divergent material guards; empty/out-of-range columns
     // can then skip the material table and every detail/blending lookup.
     vec2 atlasGradX = dFdx(texCoord0), atlasGradY = dFdy(texCoord0);
@@ -369,9 +309,6 @@ void bb_terrain_main() {
     samplePosition = VolumeMode > 0.5 ? planePosition(biomePosition) : biomePosition;
     planeOffset = VolumeMode > 0.5 ? planePosition(worldOffset).xz : NoiseOffset;
     ivec3 ownBlock = ivec3(floor(biomePosition - faceNormal * 0.001));
-    faceBit = 1 << faceIndex();
-    hintHigh = faceIndex() < 5;
-    hintBit = hintHigh ? 6 + 2 * faceIndex() : 14;
     float footprint = max(length(dFdx(world)), length(dFdy(world)));
     if (source.a * vertexColor.a * ColorModulator.a < AlphaCutoff) discard;
     ivec2 cell = VolumeMode > 0.5 ? ivec2(floor(samplePosition.xz)) : ivec2(floor(biomePosition.xz - faceNormal.xz * 0.001));
@@ -390,7 +327,7 @@ void bb_terrain_main() {
             vec4 overlayBounds = rect(material, face + 6);
             if (inRect(texCoord0, overlayBounds)) {
                 vec2 ratio = (bounds.zw - bounds.xy) / (overlayBounds.zw - overlayBounds.xy);
-                vec4 base = atlasTexel(bounds.xy + (texCoord0 - overlayBounds.xy) * ratio,
+                vec4 base = textureGrad(Sampler0, bounds.xy + (texCoord0 - overlayBounds.xy) * ratio,
                         atlasGradX * ratio, atlasGradY * ratio);
                 // If a custom base has a cutout hole, its pass could not composite this pixel.
                 if (base.a * vertexColor.a * ColorModulator.a >= max(AlphaCutoff, 0.0001)) discard;
@@ -406,17 +343,11 @@ void bb_terrain_main() {
                 albedo = source;
             }
             vec3 blendPosition = biomePosition;
-            if (TextureAlignedBlending > 0.5 && !blendRegional && !blendLocal) {
-                // Nothing blends here, so only detail shading reads the aligned position. A cube
-                // face's texels sit on the block's own grid; snap to its center directly.
-                float density = floor(span.x * atlasSize.x + 0.5);
-                vec3 plane = floor(biomePosition - faceNormal * 0.001) + max(faceNormal, vec3(0.0));
-                world = mix((floor(biomePosition * density) + 0.5) / density, plane, abs(faceNormal)) + worldOffset;
-            } else if (TextureAlignedBlending > 0.5) {
+            if (TextureAlignedBlending > 0.5) {
                 // Project the actual atlas texel center back onto the face. This follows
                 // rotated/mirrored UVs, UV inset and resource-pack resolution.
-                vec2 center = (floor(texCoord0 * atlasSize) + 0.5)
-                        / atlasSize;
+                vec2 center = (floor(texCoord0 * vec2(textureSize(Sampler0, 0))) + 0.5)
+                        / vec2(textureSize(Sampler0, 0));
                 vec2 delta = center - texCoord0;
                 float determinant = atlasGradX.x * atlasGradY.y - atlasGradX.y * atlasGradY.x;
                 if (abs(determinant) > 1e-20) {
@@ -456,4 +387,8 @@ void bb_terrain_main() {
     // Tint compensation can exceed 1 before vertex tint cancels it. Limit highlights only after that cancellation.
     if (applyDetail) color.rgb = shadeSurface(color.rgb, world, footprint);
     fragColor = BB_FOG(color);
+}
+
+void main() {
+    bb_terrain_main();
 }

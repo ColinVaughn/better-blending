@@ -89,6 +89,16 @@ public final class IrisShaders {
                         in vec3 biomePosition;
                         #endif
                         """, "in vec3 biomePosition;\n")
+                // The same goes for the host sampling defaults: packs sample the atlas plainly.
+                .replace("""
+                        #ifndef BB_RGSS
+                        #define BB_RGSS false
+                        #endif
+                        #ifndef BB_LOD_BIAS
+                        #define BB_LOD_BIAS 0.0
+                        #endif
+                        """, "")
+                .replace("BB_RGSS", "false").replace("BB_LOD_BIAS", "0.0")
                 .replace("void bb_terrain_main() {\n    vec4 source = BB_SAMPLE_BASE(texCoord0);",
                         "vec4 blend(vec2 texCoord0, vec4 source) {")
                 .replace("    if (source.a * vertexColor.a * ColorModulator.a < AlphaCutoff) discard;", "")

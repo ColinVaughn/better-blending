@@ -100,6 +100,7 @@ public final class RendererShaders {
                 #define AlphaCutoff 0.0
                 #endif
                 #define bb_mip_bias v_MaterialMipBias
+                #define BB_LOD_BIAS bb_mip_bias
                 #define BB_SAMPLE_BASE(uv) texture(Sampler0, uv, bb_mip_bias)
                 #define BB_FOG(color) _linearFog(color, v_FragDistance, u_FogColor, u_FogStart, u_FogEnd)
                 """ + ShaderSources.uniforms() + terrain + """

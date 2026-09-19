@@ -260,7 +260,7 @@ if (isPrimary) {
         jvmArgumentProviders.add(CommandLineArgumentProvider {
             rendererFixtures.map { (name, fixture) -> "-Dbb.rendererFixture.$name=${fixture.singleFile}" }
         })
-        for (flag in listOf("BB_SHADER_GL_TEST", "BB_SHADER_BENCHMARK", "BB_TERRAIN_PROFILE")) {
+        for (flag in listOf("BB_SHADER_GL_TEST", "BB_SHADER_BENCHMARK", "BB_TERRAIN_PROFILE", "BB_SHADER_AUDIT", "BB_AUDIT_MAX_CHANGED")) {
             inputs.property(flag, providers.environmentVariable(flag).orElse("0"))
         }
     }

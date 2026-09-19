@@ -36,11 +36,12 @@ import static org.lwjgl.opengl.GL32C.*;
 final class ShaderBenchmark {
     private ShaderBenchmark() { }
 
-    static void measure(String name, Runnable baseline, Runnable enabled) throws Exception {
-        measure(name, baseline, enabled, 200);
+    static double[] measure(String name, Runnable baseline, Runnable enabled) throws Exception {
+        return measure(name, baseline, enabled, 200);
     }
 
-    static void measure(String name, Runnable baseline, Runnable enabled, int samples) throws Exception {
+    /* Returns the baseline and enabled medians in milliseconds, the median paired ratio and the median paired difference. */
+    static double[] measure(String name, Runnable baseline, Runnable enabled, int samples) throws Exception {
         int query = glGenQueries();
         for (int i = 0; i < samples / 2; i++) { baseline.run(); enabled.run(); }
         glFinish();
@@ -55,6 +56,15 @@ final class ShaderBenchmark {
             }
         }
         glDeleteQueries(query);
+        // Each pair runs back to back, so per-pair ratios and differences cancel clock drift
+        // and thermal throttling that shift both medians between runs.
+        double[] ratios = new double[samples], differences = new double[samples];
+        for (int i = 0; i < samples; i++) {
+            ratios[i] = times[1][i] / times[0][i];
+            differences[i] = times[1][i] - times[0][i];
+        }
+        Arrays.sort(ratios);
+        Arrays.sort(differences);
         for (var series : times) Arrays.sort(series);
         String row = String.format(Locale.ROOT, "%s,%.4f,%.4f,%.4f,%.4f,%.4f%n", name,
                 times[0][samples / 2], times[0][samples * 95 / 100], times[1][samples / 2], times[1][samples * 95 / 100], times[1][samples / 2] - times[0][samples / 2]);
@@ -64,5 +74,6 @@ final class ShaderBenchmark {
                 + "\ncase,baseline_median_ms,baseline_p95_ms,enabled_median_ms,enabled_p95_ms,median_delta_ms\n");
         Files.writeString(path, row, StandardOpenOption.APPEND);
         System.out.print(row);
+        return new double[]{times[0][samples / 2], times[1][samples / 2], ratios[samples / 2], differences[samples / 2]};
     }
 }

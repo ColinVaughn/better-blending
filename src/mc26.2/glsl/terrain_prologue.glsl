@@ -61,5 +61,6 @@ vec4 bb_sampleRGSS(sampler2D source, vec2 uv, vec2 pixelSize) {
     return mix(bb_sampleNearest(source, uv, pixelSize, du, dv, texelScreenSize), rgss, blendFactor);
 }
 
+#define BB_RGSS (UseRgss == 1)
 #define BB_SAMPLE_BASE(uv) (UseRgss == 1 ? bb_sampleRGSS(Sampler0, uv, 1.0 / vec2(TextureSize)) : bb_sampleNearest(Sampler0, uv, 1.0 / vec2(TextureSize)))
 #define BB_FOG(color) apply_fog(mix(FogColor * vec4(1.0, 1.0, 1.0, (color).a), (color), ChunkVisibility), sphericalVertexDistance, cylindricalVertexDistance, FogEnvironmentalStart, FogEnvironmentalEnd, FogRenderDistanceStart, FogRenderDistanceEnd, FogColor)

@@ -50,6 +50,7 @@ class TerrainShaderTest {
     }
 
     private static final int SIZE = 512;
+    static boolean byteTextures = "1".equals(System.getenv("BB_TERRAIN_PROFILE"));
     private Fixture fixture = Fixture.MIXED;
     private boolean uniformScene;
     private final Set<Integer> palette = new HashSet<>();
@@ -183,7 +184,8 @@ class TerrainShaderTest {
         try {
             glfwMakeContextCurrent(window);
             GL.createCapabilities();
-            com.mojang.blaze3d.systems.RenderSystem.initRenderThread();
+            // Once per JVM; the shader audit shares it.
+            if (!com.mojang.blaze3d.systems.RenderSystem.isOnRenderThread()) com.mojang.blaze3d.systems.RenderSystem.initRenderThread();
             net.minecraft.SharedConstants.tryDetectVersion();
             net.minecraft.server.Bootstrap.bootStrap();
             var previousConfig = BlendingConfig.INSTANCE;
@@ -479,6 +481,8 @@ class TerrainShaderTest {
         });
         assertEquals(28 * 28, calls.get(), "Only exposed faces are sampled, independently of camera direction");
         assertEquals(28 * 28 * 3, data.voxels().length, "Keep the sparse exposed surface, not the entire volume");
+        // Probe hints add only the section's own blocks beside a surface: here the stone just under it.
+        assertEquals(16 * 16, data.hints().length, "Probe hints must stay next to surfaces");
         int boundary = ((21 * 28 + 14) * 28 + 21);
         for (int i = 0; i < data.voxels().length; i += 3) if (data.voxels()[i] == boundary)
             assertEquals(12288, data.voxels()[i + 1] & 12288, "The neighboring section's donor must be ready before drawing");
@@ -1085,9 +1089,7 @@ class TerrainShaderTest {
     private void profileTerrain(int shader, int output, int depth) throws Exception {
         Path review = Path.of("build/shader-review");
         Files.createDirectories(review);
-        Path reference = review.resolve("terrain-before-performance.fsh");
-        int before = program(resource("core/terrain.vsh"), Files.exists(reference)
-                ? imports(Files.readString(reference)) : resource("core/terrain.fsh"));
+        int before = program(resource("core/terrain.vsh"), reference());
         int vanilla = program(resource("vanilla/core/rendertype_solid.vsh"), resource("vanilla/core/rendertype_solid.fsh"));
         fixture = Fixture.MIXED;
         glUseProgram(shader); atlas();
@@ -1179,7 +1181,7 @@ class TerrainShaderTest {
         }
         var ready = new ArrayList<TerrainSections.Data>();
         for (int y = -4; y <= 4; y++) for (int z = -5; z <= 5; z++) for (int x = -5; x <= 5; x++)
-            ready.add(new TerrainSections.Data(x * 16, y * 16, z * 16, 6, entries));
+            ready.add(new TerrainSections.Data(x * 16, y * 16, z * 16, 6, entries, new int[0]));
         try (var volume = new TerrainVolume(256)) {
             volume.move(-128, -128, -128);
             for (int frame = 0; frame < 4; frame++) {
@@ -1194,7 +1196,7 @@ class TerrainShaderTest {
                 volume.upload();
             }
             var changed = ready.getFirst();
-            ready.set(0, new TerrainSections.Data(changed.x(), changed.y(), changed.z(), changed.radius(), changed.voxels()));
+            ready.set(0, new TerrainSections.Data(changed.x(), changed.y(), changed.z(), changed.radius(), changed.voxels(), changed.hints()));
             volume.prepare(ready);
             assertTrue(volume.pendingUploads() <= 27, "One section rebuild must not dirty unrelated donor pages across the entire cache");
             volume.upload();
@@ -1211,10 +1213,10 @@ class TerrainShaderTest {
         com.mojang.blaze3d.systems.RenderSystem.bindTexture(0);
         try (var volume = new TerrainVolume(64)) {
             int[] voxel = {0, 1 | (1 << 17), -1};
-            volume.prepare(new ArrayList<>(java.util.List.of(new TerrainSections.Data(0, 0, 0, 0, voxel))));
+            volume.prepare(new ArrayList<>(java.util.List.of(new TerrainSections.Data(0, 0, 0, 0, voxel, new int[0]))));
             volume.move(64, 0, 0);
-            var outsideEdit = new TerrainSections.Data(0, 0, 0, 0, voxel);
-            var inside = new TerrainSections.Data(64, 0, 0, 0, voxel);
+            var outsideEdit = new TerrainSections.Data(0, 0, 0, 0, voxel, new int[0]);
+            var inside = new TerrainSections.Data(64, 0, 0, 0, voxel, new int[0]);
             for (int frame = 0; frame < 3; frame++) {
                 volume.prepare(new ArrayList<>(java.util.List.of(outsideEdit, inside)));
                 if (frame > 0) assertEquals(0, volume.pendingUploads(), "An edited section outside cache coverage must not invalidate visible data every frame");
@@ -1351,7 +1353,7 @@ class TerrainShaderTest {
         return data;
     }
 
-    private void atlas() throws Exception {
+    void atlas() throws Exception {
         palette.clear();
         float[] data = new float[256 * 32 * 4];
         for (int sprite = 0; sprite < fixture.textures.length; sprite++) {
@@ -1424,7 +1426,7 @@ class TerrainShaderTest {
         return uploadMesh(program, values);
     }
 
-    private static int uploadMesh(int program, ArrayList<Float> values) {
+    static int uploadMesh(int program, ArrayList<Float> values) {
         float[] vertices = new float[values.size()];
         for (int i = 0; i < vertices.length; i++) vertices[i] = values.get(i);
         glBindVertexArray(glGenVertexArrays());
@@ -1446,7 +1448,7 @@ class TerrainShaderTest {
         return vertices.length / 12;
     }
 
-    private void quad(ArrayList<Float> values, int sprite, float[][] positions, float[] normal, float shade) {
+    void quad(ArrayList<Float> values, int sprite, float[][] positions, float[] normal, float shade) {
         for (int index : new int[]{0, 1, 2, 0, 2, 3}) {
             for (float coordinate : positions[index]) values.add(coordinate);
             float u = index == 1 || index == 2 ? 0.999F : 0.001F;
@@ -1462,7 +1464,7 @@ class TerrainShaderTest {
         }
     }
 
-    private void uniforms(int program) {
+    void uniforms(int program) {
         glUniform1f(glGetUniformLocation(program, "TextureAlignedBlending"), 0);
         glUniform1f(glGetUniformLocation(program, "LocalBlendStrength"), 1);
         float[] table = new float[18 * TerrainMaterials.LIMIT * 4];
@@ -1538,7 +1540,7 @@ class TerrainShaderTest {
         return shader;
     }
 
-    private static int program(String vertex, String fragment) {
+    static int program(String vertex, String fragment) {
         int program = glCreateProgram();
         glAttachShader(program, compile(GL_VERTEX_SHADER, vertex));
         glAttachShader(program, compile(GL_FRAGMENT_SHADER, fragment));
@@ -1550,11 +1552,11 @@ class TerrainShaderTest {
         return program;
     }
 
-    private static int texture(int width, int height, float[] data) {
+    static int texture(int width, int height, float[] data) {
         int texture = glGenTextures();
         glBindTexture(GL_TEXTURE_2D, texture);
         // Precision fixtures use floats; profiling must match Minecraft's byte textures.
-        int format = "1".equals(System.getenv("BB_TERRAIN_PROFILE")) ? GL_RGBA8 : GL_RGBA32F;
+        int format = byteTextures ? GL_RGBA8 : GL_RGBA32F;
         glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, GL_RGBA, GL_FLOAT, data);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -1570,7 +1572,7 @@ class TerrainShaderTest {
         return pixels;
     }
 
-    private static int rgb(float[] pixels, int pixel) {
+    static int rgb(float[] pixels, int pixel) {
         int color = 0;
         for (int c = 0; c < 3; c++) color = (color << 8) | Math.clamp(Math.round(pixels[pixel * 4 + c] * 255), 0, 255);
         return color;
@@ -1584,7 +1586,7 @@ class TerrainShaderTest {
         ImageIO.write(image, "png", path.toFile());
     }
 
-    private String resource(String path) throws Exception {
+    String resource(String path) throws Exception {
         String prefix = path.startsWith("include/") || path.startsWith("vanilla/") ? "/assets/minecraft/shaders/" : "/assets/better_blending/shaders/";
         path = path.replace("vanilla/", "");
         try (var stream = getClass().getResourceAsStream(prefix + path)) {
@@ -1595,7 +1597,15 @@ class TerrainShaderTest {
         }
     }
 
-    private String imports(String source) throws Exception {
+    /* The shader as it looked before performance work. Replace it only when the look changes on purpose. */
+    String reference() throws Exception {
+        try (var stream = getClass().getResourceAsStream("/reference/terrain-reference.fsh")) {
+            assertNotNull(stream, "reference/terrain-reference.fsh");
+            return imports(new String(stream.readAllBytes(), StandardCharsets.UTF_8));
+        }
+    }
+
+    String imports(String source) throws Exception {
         for (String include : new String[]{"light.glsl", "fog.glsl"}) {
             String directive = "#moj_import <" + include + ">";
             if (source.contains(directive)) source = source.replace(directive, resource("include/" + include));

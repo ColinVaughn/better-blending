@@ -32,5 +32,6 @@ vec3 faceNormal;
 
 // The atlas is sampled with vanilla's own helpers, so faces that blending leaves alone
 // look exactly as they would without the mod.
+#define BB_RGSS (UseRgss == 1)
 #define BB_SAMPLE_BASE(uv) (UseRgss == 1 ? sampleRGSS(Sampler0, uv, 1.0 / vec2(TextureSize)) : sampleNearest(Sampler0, uv, 1.0 / vec2(TextureSize)))
 #define BB_FOG(color) apply_fog(mix(FogColor * vec4(1.0, 1.0, 1.0, (color).a), (color), chunkVisibility), sphericalVertexDistance, cylindricalVertexDistance, FogEnvironmentalStart, FogEnvironmentalEnd, FogRenderDistanceStart, FogRenderDistanceEnd, FogColor)

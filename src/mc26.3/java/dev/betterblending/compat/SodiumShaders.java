@@ -52,6 +52,7 @@ public final class SodiumShaders {
                 #else
                 #define AlphaCutoff 0.0
                 #endif
+                #define BB_RGSS u_UseRGSS
                 #define BB_SAMPLE_BASE(uv) (u_UseRGSS ? sampleRGSS(u_BlockTex, uv, u_TexelSize) : sampleNearest(u_BlockTex, uv, u_TexelSize))
                 #define BB_FOG(color) _linearFog(color, v_FragDistance, u_FogColor, u_EnvironmentFog, u_RenderFog, fadeFactor)
                 """ + ShaderSources.core() + """

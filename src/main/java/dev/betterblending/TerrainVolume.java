@@ -9,6 +9,7 @@ import java.util.BitSet;
 /** Sparse 16-cubed pages, uploaded in 64x64 patches instead of transferring the whole volume. */
 final class TerrainVolume implements AutoCloseable {
     static final int PAGE_LIMIT = 1024, ATLAS_SIZE = 2048;
+    static final int HINTED = 1 << 16;
     final TerrainTexture blocks, colors;
     final TerrainTexture index;
     final int size, sections, capacity;
@@ -41,7 +42,7 @@ final class TerrainVolume implements AutoCloseable {
         originX = x; originY = y; originZ = z;
         revision++;
         index.fill(0, 0, sections * sections, sections, 0);
-        for (var entry : slots.long2IntEntrySet()) writeIndex(entry.getLongKey(), entry.getIntValue() + 1);
+        for (var entry : slots.long2IntEntrySet()) writeIndex(entry.getLongKey(), indexEntry(entry.getIntValue()));
         indexDirty = true;
     }
 
@@ -102,7 +103,7 @@ final class TerrainVolume implements AutoCloseable {
         slots.put(key, slot);
         owners[slot] = null;
         clearPage(slot);
-        writeIndex(key, slot + 1);
+        writeIndex(key, indexEntry(slot));
         return slot;
     }
 
@@ -125,6 +126,7 @@ final class TerrainVolume implements AutoCloseable {
         for (int slot = affected.nextSetBit(0); slot >= 0; slot = affected.nextSetBit(slot + 1)) {
             owners[slot] = null;
             clearPage(slot);
+            writeIndex(keys[slot], indexEntry(slot));
         }
         revision++;
     }
@@ -158,16 +160,11 @@ final class TerrainVolume implements AutoCloseable {
         if (owners[slot] != data) {
             clearPage(slot);
             owners[slot] = data;
+            writeIndex(keys[slot], indexEntry(slot));
         }
-        int width = 16 + data.radius() * 2;
-        int[] entries = data.voxels();
-        for (int i = 0; i < entries.length; i += 3) {
-            int index = entries[i];
-            int x = data.x() + index % width - data.radius();
-            int z = data.z() + index / width % width - data.radius();
-            int y = data.y() + index / (width * width) - data.radius();
-            if (contains(x, y, z)) writeEntry(slot, x, y, z, entries[i + 1], entries[i + 2]);
-        }
+        data.forEachVoxel((x, y, z, block, color) -> {
+            if (contains(x, y, z)) writeEntry(slot, x, y, z, block, color);
+        });
         published[slot] = revision;
     }
 
@@ -205,6 +202,15 @@ final class TerrainVolume implements AutoCloseable {
         double y = SectionPos.y(key) * 16 + 8 - (originY + size / 2);
         double z = SectionPos.z(key) * 16 + 8 - (originZ + size / 2);
         return x * x + y * y + z * z;
+    }
+
+    /*
+     A page's index entry: its slot plus one, with HINTED once its own section has published it.
+     Only then are its probe hints complete; pages filled from neighbors' halos are probed in full.
+     (A section baked without a halo has no hints, but then blending is off and nothing reads them.)
+     */
+    private int indexEntry(int slot) {
+        return slot + 1 | (owners[slot] != null ? HINTED : 0);
     }
 
     private void writeIndex(long key, int value) {

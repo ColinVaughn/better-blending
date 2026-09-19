@@ -21,7 +21,25 @@ import java.util.function.ToLongFunction;
 /** Immutable blend data built from the same snapshot and on the same task as the section mesh. */
 public final class TerrainSections implements AutoCloseable {
     private static final Direction[] FACES = Direction.values();
-    public record Data(int x, int y, int z, int radius, int[] voxels) {}
+    /*
+     A baked section: voxels holds (halo index, packed block, tint) for every sampled block;
+     hints holds one int per air or buried block of the section beside a surface, its halo
+     index in bits 0-14 and its 12 probe-hint bits above (see compactHints).
+     */
+    public record Data(int x, int y, int z, int radius, int[] voxels, int[] hints) {
+        interface VoxelSink { void accept(int x, int y, int z, int block, int color); }
+
+        /* Every stored block in world coordinates: sampled blocks with their tint, then hint-only blocks. */
+        void forEachVoxel(VoxelSink sink) {
+            int width = 16 + radius * 2;
+            for (int i = 0; i < voxels.length; i += 3) at(voxels[i], width, voxels[i + 1], voxels[i + 2], sink);
+            for (int entry : hints) at(entry & 0x7FFF, width, expandHints(entry), 0, sink);
+        }
+
+        private void at(int index, int width, int block, int color, VoxelSink sink) {
+            sink.accept(x + index % width - radius, y + index / (width * width) - radius, z + index / width % width - radius, block, color);
+        }
+    }
     private final Map<Object, Data> compiled = Collections.synchronizedMap(new WeakHashMap<>());
     final TerrainMaterials materials = new TerrainMaterials();
     private final int radius = BlendingConfig.INSTANCE.terrainBiomeBlendStrength() > 0 ? 6
@@ -48,7 +66,7 @@ public final class TerrainSections implements AutoCloseable {
         int width = 16 + radius * 2, length = width * width * width;
         int[] blocks = new int[length], colors = new int[length];
         sampleBlocks(region, origin, radius, sample, blocks, colors);
-        return new Data(origin.getX(), origin.getY(), origin.getZ(), radius, pack(blocks, colors, width, radius));
+        return pack(origin, blocks, colors, width, radius);
     }
 
     private static void sampleBlocks(BlockGetter region, BlockPos origin, int radius, ToLongFunction<BlockPos> sample,
@@ -66,17 +84,78 @@ public final class TerrainSections implements AutoCloseable {
         }
     }
 
-    /* Index, block and color of every sampled block, with boundary flags on the section's own blocks. */
-    private static int[] pack(int[] blocks, int[] colors, int width, int radius) {
+    /*
+     Index, block and color of every sampled block, with boundary flags on the section's own blocks.
+     A lone block's color has alpha 0: the shader then skips it as a regional donor.
+     */
+    private static Data pack(BlockPos origin, int[] blocks, int[] colors, int width, int radius) {
         int[][] strides = strides(width);
-        var result = new IntArrayList();
+        var voxels = new IntArrayList();
+        var hints = new IntArrayList();
         for (int y = 0; y < width; y++) for (int z = 0; z < width; z++) for (int x = 0; x < width; x++) {
-            int index = (y * width + z) * width + x, packed = blocks[index];
-            if (packed == 0) continue;
-            if (inSection(x, y, z, radius)) packed |= boundaryBits(blocks, strides, index, radius, packed);
-            result.add(index); result.add(packed); result.add(colors[index]);
+            int index = (y * width + z) * width + x;
+            boolean lone = LoneBlocks.lone(blocks, strides, index, width);
+            int packed = inSection(x, y, z, radius) ? ownEntry(blocks, strides, index, radius, lone) : blocks[index];
+            store(voxels, hints, index, packed, lone ? colors[index] & 0xFFFFFF : colors[index]);
         }
-        return result.toIntArray();
+        return new Data(origin.getX(), origin.getY(), origin.getZ(), radius, voxels.toIntArray(), hints.toIntArray());
+    }
+
+    private static void store(IntArrayList voxels, IntArrayList hints, int index, int packed, int color) {
+        if ((packed & 4095) != 0) {
+            voxels.add(index); voxels.add(packed); voxels.add(color);
+        } else if (packed != 0) {
+            hints.add(compactHints(index, packed));
+        }
+    }
+
+    /* A hint-only block in one int: its halo index (under 28 cubed) in bits 0-14, its 12 hint bits above. */
+    static int compactHints(int index, int packed) {
+        return index | (packed >>> 22 | (packed >>> 14 & 3) << 10) << 15;
+    }
+
+    /* The hint bits of a compact entry, back where a packed block keeps them. */
+    static int expandHints(int entry) {
+        int hints = entry >>> 15;
+        return (hints & 1023) << 22 | (hints >>> 10) << 14;
+    }
+
+    /*
+     A block of the section itself, with boundary flags and probe hints; air and buried blocks carry hints alone.
+     Lone blocks get no boundary flags, so they keep their own texture.
+     */
+    private static int ownEntry(int[] blocks, int[][] strides, int index, int radius, boolean lone) {
+        int packed = blocks[index];
+        if (packed != 0 && !lone) packed |= boundaryBits(blocks, strides, index, radius, packed);
+        return radius > 0 ? packed | probeHints(blocks, strides, index) : packed;
+    }
+
+    /*
+     Probe hints share the packed block with its material (bits 0-11), boundary flags (12-13)
+     and exposed faces (16-21): two bits per face, at 22 + 2 * face for faces 0-4 and at 14 for face 5.
+     */
+    static int hintShift(int face) {
+        return face < 5 ? 22 + 2 * face : 14;
+    }
+
+    /*
+     Per face, where a surface lookup that finds this block unexposed should read next: 1 when
+     the block one step inward along the face's normal is exposed on that face, else 2 when the
+     block one step outward is, else 0 for neither. The shader then reads one block, not three.
+     */
+    private static int probeHints(int[] blocks, int[][] strides, int index) {
+        int hints = 0;
+        for (var face : FACES) {
+            int f = face.get3DDataValue();
+            int step = strides[f][0] * face.getAxisDirection().getStep();
+            int code = exposedOn(blocks[index - step], f) ? 1 : exposedOn(blocks[index + step], f) ? 2 : 0;
+            hints |= code << hintShift(f);
+        }
+        return hints;
+    }
+
+    static boolean exposedOn(int packed, int face) {
+        return (packed & 4095) != 0 && (packed >> (16 + face) & 1) != 0;
     }
 
     /* The sample with the block's exposed faces in bits 16 to 21, or 0 when there is nothing to blend. */

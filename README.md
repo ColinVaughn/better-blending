@@ -24,7 +24,7 @@ The build is a [Stonecutter](https://stonecutter.kikugie.dev/) matrix. Each targ
 # Or: .\gradlew.bat "1.21.1-neoforge:runClient"
 ```
 
-Install the jar for your setup from `versions/<node>/build/libs/`, for example `better-blending-1.21.1-fabric-0.3.0.jar` or `better-blending-1.21.1-neoforge-0.3.0.jar`. Fabric also needs Fabric API. The mod is client-only; servers do not need it.
+Install the jar for your setup from `versions/<node>/build/libs/`, for example `better-blending-1.21.1-fabric-0.3.1.jar` or `better-blending-1.21.1-neoforge-0.3.1.jar`. Fabric also needs Fabric API. The mod is client-only; servers do not need it.
 
 One thing to watch if you are working on the source: Stonecutter keeps the working tree in the shape of one *active* node and rewrites `src/` in place when you switch, so switch back to `1.21.1-fabric` before committing.
 

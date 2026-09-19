@@ -24,7 +24,7 @@ The build is a [Stonecutter](https://stonecutter.kikugie.dev/) matrix. Each targ
 # Or: .\gradlew.bat "1.21.1-neoforge:runClient"
 ```
 
-Install the jar for your setup from `versions/<node>/build/libs/`, for example `better-blending-1.21.1-fabric-0.3.1.jar` or `better-blending-1.21.1-neoforge-0.3.1.jar`. Fabric also needs Fabric API. The mod is client-only; servers do not need it.
+Install the jar for your setup from `versions/<node>/build/libs/`, for example `better-blending-1.21.1-fabric-0.3.2.jar` or `better-blending-1.21.1-neoforge-0.3.2.jar`. Fabric also needs Fabric API. The mod is client-only; servers do not need it.
 
 One thing to watch if you are working on the source: Stonecutter keeps the working tree in the shape of one *active* node and rewrites `src/` in place when you switch, so switch back to `1.21.1-fabric` before committing.
 
@@ -48,6 +48,7 @@ Without those optional mods, edit `config/better-blending.json`, created on firs
   "terrain_biome_blend_strength": 0.45,
   "surface_shader_strength": 1.0,
   "local_blend_strength": 1.0,
+  "blending_style": "ISOLATED_BLOCKS",
   "texture_aligned_blending": true,
   "surface_detail_strength": 1.0,
   "surface_map_size": 256,
@@ -57,6 +58,8 @@ Without those optional mods, edit `config/better-blending.json`, created on firs
 ```
 
 Strengths clamp to 0-1. Local and regional strengths control nearby and wider transitions independently, and transitions follow every exposed face, entire walls and undersides included. Grass sides and other compatible two-layer faces blend their base and tinted overlay together, as both receivers and donors; more complex layers and mismatched UVs keep their original rendering. Surface detail controls the added texture variation and lighting, and an overall surface strength of zero bypasses blending and map work entirely.
+
+`blending_style` controls small features: `FULL_BLEND` gives the pre-0.3.1 behavior, `ISOLATED_BLOCKS` keeps a single placed block uncovered while adjacent blocks blend normally, and `SMALL_FEATURES` also protects pairs as in 0.3.1.
 
 `enabled` is the master switch. To exclude specific dimensions, add their IDs, such as `minecraft:the_end` or `modid:dimension`, to `disabled_dimensions`.
 

@@ -90,11 +90,12 @@ public final class TerrainSections implements AutoCloseable {
      */
     private static Data pack(BlockPos origin, int[] blocks, int[] colors, int width, int radius) {
         int[][] strides = strides(width);
+        int surfaceNeighbors = BlendingConfig.INSTANCE.blendingStyle().surfaceNeighbors;
         var voxels = new IntArrayList();
         var hints = new IntArrayList();
         for (int y = 0; y < width; y++) for (int z = 0; z < width; z++) for (int x = 0; x < width; x++) {
             int index = (y * width + z) * width + x;
-            boolean lone = LoneBlocks.lone(blocks, strides, index, width);
+            boolean lone = LoneBlocks.lone(blocks, strides, index, width, surfaceNeighbors);
             int packed = inSection(x, y, z, radius) ? ownEntry(blocks, strides, index, radius, lone) : blocks[index];
             store(voxels, hints, index, packed, lone ? colors[index] & 0xFFFFFF : colors[index]);
         }

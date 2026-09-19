@@ -11,6 +11,7 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -39,6 +40,10 @@ public final class BlendingConfigScreen {
                 .setSaveConsumer(value -> config.excluded_blocks = new ArrayList<>(value)).build());
         strength(entries, blending, "strength", config.surfaceShaderStrength(), 100,
                 value -> config.surface_shader_strength = value);
+        blending.addEntry(entries.startEnumSelector(text("style"), BlendingConfig.BlendingStyle.class, config.blendingStyle())
+                .setDefaultValue(BlendingConfig.BlendingStyle.ISOLATED_BLOCKS).setTooltip(text("style.tooltip"))
+                .setEnumNameProvider(style -> text("style." + style.name().toLowerCase(Locale.ROOT)))
+                .setSaveConsumer(value -> config.blending_style = value).build());
         blending.addEntry(entries.startBooleanToggle(text("texture_aligned"), config.textureAlignedBlending())
                 .setDefaultValue(true).setTooltip(text("texture_aligned.tooltip"))
                 .setSaveConsumer(value -> config.texture_aligned_blending = value).build());

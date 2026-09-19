@@ -37,6 +37,7 @@ class BlendingConfigTest {
         var gson = new Gson();
         var defaults = gson.fromJson("{}", BlendingConfig.class);
         assertTrue(defaults.vanillaTerrainShaderEnabled());
+        assertEquals(BlendingConfig.BlendingStyle.ISOLATED_BLOCKS, defaults.blendingStyle());
         assertEquals(0.45F, defaults.terrainBiomeBlendStrength());
         var config = gson.fromJson("""
                 {"terrain_biome_blend_strength": -3,
@@ -46,6 +47,8 @@ class BlendingConfigTest {
         assertEquals(0, config.terrainBiomeBlendStrength());
         assertEquals(1, config.surfaceShaderStrength());
         assertEquals(1, config.surfaceDetailStrength());
+        assertEquals(BlendingConfig.BlendingStyle.ISOLATED_BLOCKS,
+                gson.fromJson("{\"blending_style\":\"unknown\"}", BlendingConfig.class).copy().blendingStyle());
     }
 
     @Test
@@ -79,6 +82,7 @@ class BlendingConfigTest {
             draft.disabled_dimensions.clear();
             draft.local_blend_strength = 0.25F;
             draft.texture_aligned_blending = false;
+            draft.blending_style = BlendingConfig.BlendingStyle.SMALL_FEATURES;
             draft.surface_shader_strength = 0.6F;
             draft.surface_map_size = 1;
             draft.surface_refresh_ticks = 999;
@@ -90,6 +94,7 @@ class BlendingConfigTest {
             BlendingConfig.load(directory);
             assertEquals(0.25F, BlendingConfig.INSTANCE.localBlendStrength());
             assertFalse(BlendingConfig.INSTANCE.textureAlignedBlending());
+            assertEquals(BlendingConfig.BlendingStyle.SMALL_FEATURES, BlendingConfig.INSTANCE.blendingStyle());
             assertEquals(0.6F, BlendingConfig.INSTANCE.surfaceShaderStrength());
             assertEquals(64, BlendingConfig.INSTANCE.surfaceMapSize());
             assertEquals(200, BlendingConfig.INSTANCE.surfaceRefreshTicks());

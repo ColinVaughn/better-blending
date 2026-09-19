@@ -44,6 +44,22 @@ class TerrainSectionsTest {
         net.minecraft.server.Bootstrap.bootStrap();
     }
 
+    @Test
+    void blendingStylesProtectTheIntendedFeatureSizes() {
+        int width = 5, center = (2 * width + 2) * width + 2;
+        int[] blocks = new int[width * width * width];
+        int[][] strides = new int[Direction.values().length][];
+        int face = Direction.UP.get3DDataValue();
+        strides[face] = new int[]{width * width, 1, width};
+        blocks[center] = 1 | 1 << (16 + face);
+
+        assertFalse(LoneBlocks.lone(blocks, strides, center, width, 0), "Full blending protects nothing");
+        assertTrue(LoneBlocks.lone(blocks, strides, center, width, 1), "The default protects one block");
+        blocks[center + 1] = blocks[center];
+        assertFalse(LoneBlocks.lone(blocks, strides, center, width, 1), "Adjacent blocks blend by default");
+        assertTrue(LoneBlocks.lone(blocks, strides, center, width, 2), "Small-feature mode also protects a pair");
+    }
+
     /* Stone up to y = 3 west of x = 8 and up to y = 4 from there: one step, facing west. */
     private static final BlockGetter STEP = new BlockGetter() {
         @Override public BlockEntity getBlockEntity(BlockPos pos) { return null; }

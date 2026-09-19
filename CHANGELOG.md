@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.2
+
+- Added a blending-style setting. The default now protects only isolated single blocks, so two or more adjacent blocks blend normally; the original full-blend behavior and 0.3.1 single-block-and-pair protection remain selectable.
+
 ## 0.3.1
 
 - Single placed blocks and pairs keep their own texture. They used to be mostly painted over by whatever surrounded them, top face only. They still lend a narrow edge to the blocks right beside them.

@@ -20,6 +20,14 @@ import java.util.List;
 
 /** Shared JSON settings; the optional in-game screen saves and applies a detached copy. */
 public final class BlendingConfig {
+    public enum BlendingStyle {
+        FULL_BLEND(0), ISOLATED_BLOCKS(1), SMALL_FEATURES(2);
+
+        final int surfaceNeighbors;
+
+        BlendingStyle(int surfaceNeighbors) { this.surfaceNeighbors = surfaceNeighbors; }
+    }
+
     public static final Logger LOGGER = LoggerFactory.getLogger("better_blending");
     static final List<String> DEFAULT_EXCLUDED_BLOCKS = List.of("minecraft:melon", "minecraft:pumpkin",
             "minecraft:carved_pumpkin", "minecraft:jack_o_lantern", "minecraft:hay_block");
@@ -29,6 +37,7 @@ public final class BlendingConfig {
     boolean enabled = true;
     boolean vanilla_terrain_shader_enabled = true;
     boolean texture_aligned_blending = true;
+    BlendingStyle blending_style = BlendingStyle.ISOLATED_BLOCKS;
     List<String> disabled_dimensions = new ArrayList<>();
     List<String> excluded_blocks = new ArrayList<>(DEFAULT_EXCLUDED_BLOCKS);
     float terrain_biome_blend_strength = 0.45F;
@@ -87,6 +96,7 @@ public final class BlendingConfig {
         surface_map_size = surfaceMapSize();
         surface_refresh_ticks = surfaceRefreshTicks();
         sampling_budget_ms = samplingBudgetMs();
+        blending_style = blendingStyle();
         if (disabled_dimensions == null) disabled_dimensions = new ArrayList<>();
         disabled_dimensions = normalizeIds(disabled_dimensions);
         excluded_blocks = normalizeIds(excluded_blocks == null ? DEFAULT_EXCLUDED_BLOCKS : excluded_blocks);
@@ -105,6 +115,9 @@ public final class BlendingConfig {
 
     public boolean vanillaTerrainShaderEnabled() { return vanilla_terrain_shader_enabled; }
     public boolean textureAlignedBlending() { return texture_aligned_blending; }
+    public BlendingStyle blendingStyle() {
+        return blending_style == null ? BlendingStyle.ISOLATED_BLOCKS : blending_style;
+    }
     public float terrainBiomeBlendStrength() { return bounded(terrain_biome_blend_strength, 0.45F); }
     public float surfaceShaderStrength() { return bounded(surface_shader_strength, 1.0F); }
     public float localBlendStrength() { return bounded(local_blend_strength, 1.0F); }

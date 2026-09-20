@@ -26,6 +26,8 @@
   "better_blending.config.regional.tooltip": "Strength of wider material transitions on the four-block sampling grid. Zero leaves local blending active.",
   "better_blending.config.detail": "Surface detail",
   "better_blending.config.detail.tooltip": "Scales texture variation and surface lighting. Zero preserves blending without added detail.",
+  "better_blending.config.blend_leaves": "Blend leaves",
+  "better_blending.config.blend_leaves.tooltip": "Covers every block that does not occlude, leaves above all. Only the outer shell of a cluster blends either way. Turn this off to leave leaves entirely to vanilla, which costs the least in forests.",
   "better_blending.config.map_size": "Maximum sampling region size (blocks)",
   "better_blending.config.map_size.tooltip": "64-256 blocks on each axis around the camera, rounded down to whole sections. Smaller regions reduce coverage and cache memory.",
   "better_blending.config.refresh": "Surface refresh interval (ticks)",

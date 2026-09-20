@@ -54,6 +54,9 @@ public final class BlendingConfigScreen {
         strength(entries, blending, "detail", config.surfaceDetailStrength(), 100,
                 value -> config.surface_detail_strength = value);
         var performance = builder.getOrCreateCategory(text("performance"));
+        performance.addEntry(entries.startBooleanToggle(text("blend_leaves"), config.blendLeaves())
+                .setDefaultValue(true).setTooltip(text("blend_leaves.tooltip"))
+                .setSaveConsumer(value -> config.blend_leaves = value).build());
         performance.addEntry(entries.startIntSlider(text("map_size"), config.surfaceMapSize(), 64, 256)
                 .setDefaultValue(256).setTooltip(text("map_size.tooltip"))
                 .setSaveConsumer(value -> config.surface_map_size = value).build());

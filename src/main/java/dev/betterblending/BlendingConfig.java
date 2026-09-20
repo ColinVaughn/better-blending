@@ -37,6 +37,7 @@ public final class BlendingConfig {
     boolean enabled = true;
     boolean vanilla_terrain_shader_enabled = true;
     boolean texture_aligned_blending = true;
+    boolean blend_leaves = true;
     BlendingStyle blending_style = BlendingStyle.ISOLATED_BLOCKS;
     List<String> disabled_dimensions = new ArrayList<>();
     List<String> excluded_blocks = new ArrayList<>(DEFAULT_EXCLUDED_BLOCKS);
@@ -115,6 +116,7 @@ public final class BlendingConfig {
 
     public boolean vanillaTerrainShaderEnabled() { return vanilla_terrain_shader_enabled; }
     public boolean textureAlignedBlending() { return texture_aligned_blending; }
+    public boolean blendLeaves() { return blend_leaves; }
     public BlendingStyle blendingStyle() {
         return blending_style == null ? BlendingStyle.ISOLATED_BLOCKS : blending_style;
     }

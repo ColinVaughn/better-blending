@@ -24,7 +24,7 @@ The build is a [Stonecutter](https://stonecutter.kikugie.dev/) matrix. Each targ
 # Or: .\gradlew.bat "1.21.1-neoforge:runClient"
 ```
 
-Install the jar for your setup from `versions/<node>/build/libs/`, for example `better-blending-1.21.1-fabric-0.3.2.jar` or `better-blending-1.21.1-neoforge-0.3.2.jar`. Fabric also needs Fabric API. The mod is client-only; servers do not need it.
+Install the jar for your setup from `versions/<node>/build/libs/`, for example `better-blending-1.21.1-fabric-0.3.3.jar` or `better-blending-1.21.1-neoforge-0.3.3.jar`. Fabric also needs Fabric API. The mod is client-only; servers do not need it.
 
 One thing to watch if you are working on the source: Stonecutter keeps the working tree in the shape of one *active* node and rewrites `src/` in place when you switch, so switch back to `1.21.1-fabric` before committing.
 
@@ -50,6 +50,7 @@ Without those optional mods, edit `config/better-blending.json`, created on firs
   "local_blend_strength": 1.0,
   "blending_style": "ISOLATED_BLOCKS",
   "texture_aligned_blending": true,
+  "blend_leaves": true,
   "surface_detail_strength": 1.0,
   "surface_map_size": 256,
   "surface_refresh_ticks": 20,
@@ -64,6 +65,8 @@ Strengths clamp to 0-1. Local and regional strengths control nearby and wider tr
 `enabled` is the master switch. To exclude specific dimensions, add their IDs, such as `minecraft:the_end` or `modid:dimension`, to `disabled_dimensions`.
 
 `texture_aligned_blending` keeps transitions and added detail aligned to the receiving block's texture pixels, which cuts down on mixed pixel sizes ("mixels"). It follows the face UVs and the current resource pack resolution on all six cube faces. On by default; turn it off for the original blending style. Normal distance filtering stays active either way.
+
+`blend_leaves` covers every block that does not occlude, which in practice means leaves. Such blocks never cull each other, so a canopy is the most expensive thing the mod can prepare. Only the outer shell of a cluster blends, and a trunk and the canopy around it are never a boundary for each other, so leaves and bark stay apart whatever this is set to. Turn it off under **Blend leaves** to hand leaves to vanilla entirely, which is the cheapest option in forests.
 
 `surface_map_size` bounds the camera-centered GPU cache to 64-256 blocks per side, rounded down to whole sections. Smaller regions mean less coverage and less memory.
 
@@ -162,6 +165,8 @@ The GPU tests also compile the real upstream renderer shader stages for the soli
 
 ## Current limits
 
-Full solid and cutout cube terrain is supported; fluids, translucent blocks and custom geometry fall back to ordinary rendering. The cache covers a moving region up to 256 blocks on each axis, with 4,095 materials. Preparation is conservative at section granularity: hidden interior faces are skipped, while exposed faces and blend donors are prepared ahead of where the camera turns next. The GPU cache has a fixed capacity, and sections outside it render normally.
+Full solid and cutout cube terrain is supported; fluids, translucent blocks and custom geometry fall back to ordinary rendering. The cache covers a moving region up to 256 blocks on each axis, with 4,095 materials. Preparation is conservative at section granularity: hidden interior faces are skipped, while exposed faces and blend donors are prepared ahead of where the camera turns next.
+
+Blocks that do not occlude, leaves above all, never cull each other, so a cluster of them exposes every face it has and nothing inside it is skipped. Only the shell of such a cluster, the blocks that touch air, takes part in blending. Leaves buried further in render as they would without the mod, and `blend_leaves` drops the shell as well. Such a block is also never a material boundary for one that does occlude, so a trunk keeps its bark against the canopy pressed around it. The GPU cache has a fixed capacity, and sections outside it render normally.
 
 MIT licensed.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.3
+
+- Trees no longer blend with the terrain around them. Leaves and bark were mixing into each other, and into the ground under a low canopy. A block that does not occlude, which in practice means leaves, is no longer a material boundary for one that does, in either direction. Two blocks of the same kind still blend, so one species of leaf meets another as before.
+- Leaves buried inside a canopy no longer blend. Blocks that do not occlude never cull each other, so a leaf cluster exposed every face it had and the whole of it was prepared and blended. Only the shell of such a cluster, the blocks that touch air, takes part now. Thick canopies cost far less to prepare; ordinary oak and birch canopies are thin enough that most of their leaves are shell either way.
+- Added **Blend leaves** under Performance, and `blend_leaves` in the config file. It is on by default. Turning it off hands leaves to vanilla entirely, which prepares roughly half as many blocks per section in a forest.
+
 ## 0.3.2
 
 - Added a blending-style setting. The default now protects only isolated single blocks, so two or more adjacent blocks blend normally; the original full-blend behavior and 0.3.1 single-block-and-pair protection remain selectable.

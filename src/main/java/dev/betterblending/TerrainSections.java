@@ -65,22 +65,26 @@ public final class TerrainSections implements AutoCloseable {
     static Data bake(BlockGetter region, BlockPos origin, int radius, ToLongFunction<BlockPos> sample) {
         int width = 16 + radius * 2, length = width * width * width;
         int[] blocks = new int[length], colors = new int[length];
-        sampleBlocks(region, origin, radius, sample, blocks, colors);
-        return pack(origin, blocks, colors, width, radius);
+        boolean[] occluding = new boolean[length];
+        sampleBlocks(region, origin, radius, sample, blocks, colors, occluding);
+        return pack(origin, blocks, colors, occluding, width, radius);
     }
 
     private static void sampleBlocks(BlockGetter region, BlockPos origin, int radius, ToLongFunction<BlockPos> sample,
-                                     int[] blocks, int[] colors) {
+                                     int[] blocks, int[] colors, boolean[] occluding) {
         int width = 16 + radius * 2;
+        boolean blendLeaves = BlendingConfig.INSTANCE.blendLeaves();
         var position = new BlockPos.MutableBlockPos();
         var neighbor = new BlockPos.MutableBlockPos();
         for (int y = 0; y < width; y++) for (int z = 0; z < width; z++) for (int x = 0; x < width; x++) {
             position.set(origin.getX() + x - radius, origin.getY() + y - radius, origin.getZ() + z - radius);
-            long value = sampleExposed(region, position, neighbor, sample);
+            var state = region.getBlockState(position);
+            long value = sampleExposed(region, position, neighbor, state, sample, blendLeaves);
             if (value == 0) continue;
             int index = (y * width + z) * width + x;
             blocks[index] = (int) value;
             colors[index] = (int) (value >>> 32);
+            occluding[index] = state.canOcclude();
         }
     }
 
@@ -88,7 +92,7 @@ public final class TerrainSections implements AutoCloseable {
      Index, block and color of every sampled block, with boundary flags on the section's own blocks.
      A lone block's color has alpha 0: the shader then skips it as a regional donor.
      */
-    private static Data pack(BlockPos origin, int[] blocks, int[] colors, int width, int radius) {
+    private static Data pack(BlockPos origin, int[] blocks, int[] colors, boolean[] occluding, int width, int radius) {
         int[][] strides = strides(width);
         int surfaceNeighbors = BlendingConfig.INSTANCE.blendingStyle().surfaceNeighbors;
         var voxels = new IntArrayList();
@@ -96,7 +100,8 @@ public final class TerrainSections implements AutoCloseable {
         for (int y = 0; y < width; y++) for (int z = 0; z < width; z++) for (int x = 0; x < width; x++) {
             int index = (y * width + z) * width + x;
             boolean lone = LoneBlocks.lone(blocks, strides, index, width, surfaceNeighbors);
-            int packed = inSection(x, y, z, radius) ? ownEntry(blocks, strides, index, radius, lone) : blocks[index];
+            int packed = inSection(x, y, z, radius)
+                    ? ownEntry(blocks, occluding, strides, index, radius, lone) : blocks[index];
             store(voxels, hints, index, packed, lone ? colors[index] & 0xFFFFFF : colors[index]);
         }
         return new Data(origin.getX(), origin.getY(), origin.getZ(), radius, voxels.toIntArray(), hints.toIntArray());
@@ -125,9 +130,9 @@ public final class TerrainSections implements AutoCloseable {
      A block of the section itself, with boundary flags and probe hints; air and buried blocks carry hints alone.
      Lone blocks get no boundary flags, so they keep their own texture.
      */
-    private static int ownEntry(int[] blocks, int[][] strides, int index, int radius, boolean lone) {
+    private static int ownEntry(int[] blocks, boolean[] occluding, int[][] strides, int index, int radius, boolean lone) {
         int packed = blocks[index];
-        if (packed != 0 && !lone) packed |= boundaryBits(blocks, strides, index, radius, packed);
+        if (packed != 0 && !lone) packed |= boundaryBits(blocks, occluding, strides, index, radius, packed);
         return radius > 0 ? packed | probeHints(blocks, strides, index) : packed;
     }
 
@@ -161,14 +166,32 @@ public final class TerrainSections implements AutoCloseable {
 
     /* The sample with the block's exposed faces in bits 16 to 21, or 0 when there is nothing to blend. */
     private static long sampleExposed(BlockGetter region, BlockPos.MutableBlockPos position,
-                                      BlockPos.MutableBlockPos neighbor, ToLongFunction<BlockPos> sample) {
-        var state = region.getBlockState(position);
+                                      BlockPos.MutableBlockPos neighbor, BlockState state,
+                                      ToLongFunction<BlockPos> sample, boolean blendLeaves) {
         if (state.isAir() || !state.getFluidState().isEmpty() || state.hasBlockEntity()) return 0;
+        if (!takesPart(region, position, neighbor, state, blendLeaves)) return 0;
         int exposed = exposedFaces(region, position, neighbor, state);
         if (exposed == 0) return 0; // Reuse Minecraft's face culling before model/tint work.
         long value = sample.applyAsLong(position);
         if ((value & 4095) == 0) return 0;
         return value | (long) exposed << 16;
+    }
+
+    /*
+     Blocks that do not occlude never cull each other, so a leaf cluster exposes every face it
+     has, interior ones included, and the section keeps thousands of blocks the camera can
+     barely see. Only the shell of such a cluster, the blocks that touch air, takes part in
+     blending; the rest renders as it would without the mod, and blend_leaves drops the shell too.
+     */
+    private static boolean takesPart(BlockGetter region, BlockPos position, BlockPos.MutableBlockPos neighbor,
+                                     BlockState state, boolean blendLeaves) {
+        if (state.canOcclude()) return true;
+        if (!blendLeaves) return false;
+        for (var face : FACES) {
+            neighbor.setWithOffset(position, face);
+            if (region.getBlockState(neighbor).isAir()) return true;
+        }
+        return false;
     }
 
     private static int exposedFaces(BlockGetter region, BlockPos position, BlockPos.MutableBlockPos neighbor, BlockState state) {
@@ -193,9 +216,9 @@ public final class TerrainSections implements AutoCloseable {
         return coordinate >= radius && coordinate < radius + 16;
     }
 
-    private static int boundaryBits(int[] blocks, int[][] strides, int index, int radius, int packed) {
-        if (radius > 0 && boundary(blocks, strides, index, 1, packed)) return 12288;
-        if (radius > 1 && boundary(blocks, strides, index, radius, packed)) return 8192;
+    private static int boundaryBits(int[] blocks, boolean[] occluding, int[][] strides, int index, int radius, int packed) {
+        if (radius > 0 && boundary(blocks, occluding, strides, index, 1, packed)) return 12288;
+        if (radius > 1 && boundary(blocks, occluding, strides, index, radius, packed)) return 8192;
         return 0;
     }
 
@@ -213,22 +236,33 @@ public final class TerrainSections implements AutoCloseable {
         return strides;
     }
 
-    private static boolean boundary(int[] blocks, int[][] strides, int index, int radius, int packed) {
+    private static boolean boundary(int[] blocks, boolean[] occluding, int[][] strides, int index, int radius, int packed) {
         for (var face : FACES) {
             int exposure = 1 << (16 + face.get3DDataValue());
-            if ((packed & exposure) != 0
-                    && boundaryOnFace(blocks, strides[face.get3DDataValue()], index, radius, packed, exposure)) {
+            if ((packed & exposure) != 0 && boundaryOnFace(blocks, occluding,
+                    strides[face.get3DDataValue()], index, radius, packed, exposure)) {
                 return true;
             }
         }
         return false;
     }
 
-    private static boolean boundaryOnFace(int[] blocks, int[] stride, int index, int radius, int packed, int exposure) {
+    /*
+     Leaves and solid terrain are never a boundary for each other, whichever side is asking: a
+     trunk must not take on the canopy pressed against it, nor the canopy the trunk. Two blocks
+     of the same kind still blend, so one species of leaf meets another as usual.
+     */
+    private static boolean boundaryOnFace(int[] blocks, boolean[] occluding, int[] stride, int index,
+                                          int radius, int packed, int exposure) {
         int own = packed & 4095;
+        boolean occludes = occluding[index];
         for (int v = -radius; v <= radius; v++) for (int u = -radius; u <= radius; u++) for (int n = -1; n <= 1; n++) {
-            int other = blocks[index + n * stride[0] + u * stride[1] + v * stride[2]];
-            if ((other & exposure) != 0 && (other & 4095) != 0 && (other & 4095) != own) return true;
+            int neighbor = index + n * stride[0] + u * stride[1] + v * stride[2];
+            int other = blocks[neighbor];
+            if ((other & exposure) != 0 && (other & 4095) != 0 && (other & 4095) != own
+                    && occluding[neighbor] == occludes) {
+                return true;
+            }
         }
         return false;
     }

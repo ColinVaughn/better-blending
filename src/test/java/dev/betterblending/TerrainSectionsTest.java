@@ -145,6 +145,68 @@ class TerrainSectionsTest {
         }
     }
 
+    /* A solid 7-cube of leaves sitting on dirt, so the cluster has a genuine interior. */
+    private static final BlockGetter CANOPY = new BlockGetter() {
+        @Override public BlockEntity getBlockEntity(BlockPos pos) { return null; }
+        @Override public BlockState getBlockState(BlockPos pos) {
+            if (pos.getY() < 3) return Blocks.DIRT.defaultBlockState();
+            boolean canopy = pos.getY() >= 6 && pos.getY() <= 12
+                    && pos.getX() >= 3 && pos.getX() <= 9 && pos.getZ() >= 3 && pos.getZ() <= 9;
+            return (canopy ? Blocks.OAK_LEAVES : Blocks.AIR).defaultBlockState();
+        }
+        @Override public FluidState getFluidState(BlockPos pos) { return getBlockState(pos).getFluidState(); }
+        @Override public int getHeight() { return 384; }
+        @Override public int getMinBuildHeight() { return -64; }
+    };
+
+    private static Int2IntOpenHashMap bakeCanopy() {
+        var data = TerrainSections.bake(CANOPY, BlockPos.ZERO, RADIUS,
+                pos -> 0xFFFFFFFF00000000L | (CANOPY.getBlockState(pos).is(Blocks.OAK_LEAVES) ? 1 : 2));
+        var packed = new Int2IntOpenHashMap();
+        data.forEachVoxel((x, y, z, block, color) -> packed.put(index(x, y, z), block));
+        return packed;
+    }
+
+    @Test
+    void onlyTheShellOfANonOccludingClusterIsBaked() {
+        var packed = bakeCanopy();
+        assertEquals(1, packed.get(index(6, 6, 6)) & 4095, "The underside of the cluster touches air");
+        assertEquals(1, packed.get(index(3, 9, 6)) & 4095, "The side of the cluster touches air");
+        assertEquals(1, packed.get(index(6, 12, 6)) & 4095, "The top of the cluster touches air");
+        for (int[] block : new int[][]{{6, 9, 6}, {5, 8, 7}, {7, 10, 5}}) {
+            assertEquals(0, packed.get(index(block[0], block[1], block[2])) & 4095,
+                    "Leaves buried inside the cluster are left to vanilla: " + java.util.Arrays.toString(block));
+        }
+        assertEquals(2, packed.get(index(6, 2, 6)) & 4095, "Occluding ground is unaffected by the shell rule");
+    }
+
+    @Test
+    void leavesAndSolidTerrainAreNotABoundaryForEachOther() {
+        var packed = bakeCanopy();
+        // The underside of the canopy and the ground below it are both exposed, three blocks
+        // apart, different materials and well inside the regional radius.
+        assertEquals(0, packed.get(index(6, 6, 6)) & 12288, "Leaves must not blend with the ground beneath them");
+        assertEquals(0, packed.get(index(6, 2, 6)) & 12288, "The ground must not take on the canopy above it");
+    }
+
+    @Test
+    void turningLeafBlendingOffDropsTheShellAsWell() {
+        var previous = BlendingConfig.INSTANCE;
+        try {
+            var config = previous.copy();
+            config.blend_leaves = false;
+            BlendingConfig.INSTANCE = config;
+            var packed = bakeCanopy();
+            for (int[] block : new int[][]{{6, 6, 6}, {3, 9, 6}, {6, 12, 6}}) {
+                assertEquals(0, packed.get(index(block[0], block[1], block[2])) & 4095,
+                        "No leaf blends once the setting is off: " + java.util.Arrays.toString(block));
+            }
+            assertEquals(2, packed.get(index(6, 2, 6)) & 4095, "Occluding ground still blends");
+        } finally {
+            BlendingConfig.INSTANCE = previous;
+        }
+    }
+
     private static int index(int x, int y, int z) {
         return ((y + RADIUS) * WIDTH + z + RADIUS) * WIDTH + x + RADIUS;
     }

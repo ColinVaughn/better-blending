@@ -19,9 +19,13 @@ public abstract class IrisSamplersMixin {
     // every program here instead. Only programs IrisShaders patched declare these names,
     // and Iris gives no texture unit to a sampler a program lacks. The pack's atlas
     // sampler is external on the albedo unit, and blending's reads the same texture.
+    // Composite, deferred and final programs do not reserve the albedo unit
     @Inject(method = "builder", at = @At("RETURN"))
     private static void betterBlending$samplers(int program, Set<Integer> reserved,
             CallbackInfoReturnable<ProgramSamplers.Builder> cir) {
+        if (!reserved.contains(IrisSamplers.ALBEDO_TEXTURE_UNIT)) {
+            return;
+        }
         var builder = cir.getReturnValue();
         builder.addExternalSampler(IrisSamplers.ALBEDO_TEXTURE_UNIT, "bb_Sampler0");
         for (int i = 0; i < TerrainUniforms.SAMPLERS.length; i++) {
